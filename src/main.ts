@@ -8,6 +8,7 @@ const loaders: Record<string, () => Promise<{ default: Component }>> = {
   inputs: () => import("./views/Inputs.vue"),
   grip: () => import("./views/Grip.vue"),
   gforce: () => import("./views/Gforce.vue"),
+  tiretemp: () => import("./views/TireTemp.vue"),
   settings: () => import("./views/Settings.vue"),
 };
 

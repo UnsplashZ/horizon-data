@@ -1,6 +1,6 @@
 // FH6 透明覆盖层后端（多窗口）：
-// - 主表 + 输入/抓地/G力 各自独立透明置顶窗口，可分别拖动定位
-// - 监听 UDP Data Out，解析 324B，广播 "telemetry" 给所有窗口（端口热重绑）
+// - 主表 + 输入/抓地/G力/胎温 各自独立透明置顶窗口，可分别拖动定位、拖角缩放
+// - 监听 UDP Data Out，解析 324B，广播 "telemetry"（端口热重绑）
 // - 全局快捷键 Cmd/Ctrl+Shift+H 切换 编辑/锁定（锁定=全部点击穿透），编辑态显示设置窗
 // - 配置存 exe 同目录 config.json（便携/绿色版友好）
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -12,13 +12,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{Emitter, Manager, PhysicalPosition, State};
+use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const PACKET_SIZE: usize = 324;
 static EDITING: AtomicBool = AtomicBool::new(false);
-/// 可点击穿透/可拖动的覆盖窗口（不含 settings）
-const OVERLAY_WINDOWS: [&str; 4] = ["main", "inputs", "grip", "gforce"];
+const OVERLAY_WINDOWS: [&str; 5] = ["main", "inputs", "grip", "gforce", "tiretemp"];
+const MODULES: [&str; 4] = ["inputs", "grip", "gforce", "tiretemp"];
 
 #[derive(Serialize, Clone)]
 struct Telemetry {
@@ -33,6 +33,7 @@ struct Telemetry {
     accel_x: f32,
     accel_z: f32,
     tire_slip: [f32; 4],
+    tire_temp: [f32; 4],
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -45,10 +46,17 @@ struct Config {
     show_inputs: bool,
     show_grip: bool,
     show_gforce: bool,
-    pos_main: [i32; 2], // 物理像素；[-1,-1] 表示首次启动自动居中
+    show_tiretemp: bool,
+    pos_main: [i32; 2], // 物理像素；[-1,-1]=首次自动排布
     pos_inputs: [i32; 2],
     pos_grip: [i32; 2],
     pos_gforce: [i32; 2],
+    pos_tiretemp: [i32; 2],
+    size_main: [u32; 2], // 物理像素；[0,0]=用配置默认尺寸
+    size_inputs: [u32; 2],
+    size_grip: [u32; 2],
+    size_gforce: [u32; 2],
+    size_tiretemp: [u32; 2],
 }
 impl Default for Config {
     fn default() -> Self {
@@ -60,10 +68,17 @@ impl Default for Config {
             show_inputs: false,
             show_grip: false,
             show_gforce: false,
+            show_tiretemp: false,
             pos_main: [-1, -1],
             pos_inputs: [-1, -1],
             pos_grip: [-1, -1],
             pos_gforce: [-1, -1],
+            pos_tiretemp: [-1, -1],
+            size_main: [0, 0],
+            size_inputs: [0, 0],
+            size_grip: [0, 0],
+            size_gforce: [0, 0],
+            size_tiretemp: [0, 0],
         }
     }
 }
@@ -91,6 +106,37 @@ fn save_config_file(c: &Config) -> Result<(), String> {
     std::fs::write(config_path(), s).map_err(|e| e.to_string())
 }
 
+fn pos_of<'a>(c: &'a mut Config, label: &str) -> Option<&'a mut [i32; 2]> {
+    match label {
+        "main" => Some(&mut c.pos_main),
+        "inputs" => Some(&mut c.pos_inputs),
+        "grip" => Some(&mut c.pos_grip),
+        "gforce" => Some(&mut c.pos_gforce),
+        "tiretemp" => Some(&mut c.pos_tiretemp),
+        _ => None,
+    }
+}
+fn size_of<'a>(c: &'a mut Config, label: &str) -> Option<&'a mut [u32; 2]> {
+    match label {
+        "main" => Some(&mut c.size_main),
+        "inputs" => Some(&mut c.size_inputs),
+        "grip" => Some(&mut c.size_grip),
+        "gforce" => Some(&mut c.size_gforce),
+        "tiretemp" => Some(&mut c.size_tiretemp),
+        _ => None,
+    }
+}
+fn module_shown(c: &Config, label: &str) -> bool {
+    match label {
+        "main" => true,
+        "inputs" => c.show_inputs,
+        "grip" => c.show_grip,
+        "gforce" => c.show_gforce,
+        "tiretemp" => c.show_tiretemp,
+        _ => false,
+    }
+}
+
 #[tauri::command]
 fn get_config(state: State<AppState>) -> Config {
     state.config.lock().unwrap().clone()
@@ -98,21 +144,34 @@ fn get_config(state: State<AppState>) -> Config {
 
 #[tauri::command]
 fn update_config(app: tauri::AppHandle, state: State<AppState>, config: Config) -> Result<(), String> {
-    // 位置只由拖动(save_window_pos)写入，设置面板的更新不得覆盖
+    // 位置/尺寸只由拖动写入，设置面板更新不得覆盖
     let merged = {
         let mut c = state.config.lock().unwrap();
-        let pos = (c.pos_main, c.pos_inputs, c.pos_grip, c.pos_gforce);
+        let positions = (c.pos_main, c.pos_inputs, c.pos_grip, c.pos_gforce, c.pos_tiretemp);
+        let sizes = (c.size_main, c.size_inputs, c.size_grip, c.size_gforce, c.size_tiretemp);
         *c = config;
-        c.pos_main = pos.0;
-        c.pos_inputs = pos.1;
-        c.pos_grip = pos.2;
-        c.pos_gforce = pos.3;
+        c.pos_main = positions.0;
+        c.pos_inputs = positions.1;
+        c.pos_grip = positions.2;
+        c.pos_gforce = positions.3;
+        c.pos_tiretemp = positions.4;
+        c.size_main = sizes.0;
+        c.size_inputs = sizes.1;
+        c.size_grip = sizes.2;
+        c.size_gforce = sizes.3;
+        c.size_tiretemp = sizes.4;
         c.clone()
     };
     save_config_file(&merged)?;
     state.desired_port.store(merged.port, Ordering::Relaxed);
     apply_module_visibility(&app, &merged);
     let _ = app.emit("config", &merged);
+    // 显示新窗口会抢焦点：编辑态下把焦点交回设置窗，方便连续勾选
+    if EDITING.load(Ordering::Relaxed) {
+        if let Some(s) = app.get_webview_window("settings") {
+            let _ = s.set_focus();
+        }
+    }
     Ok(())
 }
 
@@ -120,12 +179,21 @@ fn update_config(app: tauri::AppHandle, state: State<AppState>, config: Config) 
 fn save_window_pos(app: tauri::AppHandle, state: State<AppState>, label: String, x: i32, y: i32) {
     let merged = {
         let mut c = state.config.lock().unwrap();
-        match label.as_str() {
-            "main" => c.pos_main = [x, y],
-            "inputs" => c.pos_inputs = [x, y],
-            "grip" => c.pos_grip = [x, y],
-            "gforce" => c.pos_gforce = [x, y],
-            _ => {}
+        if let Some(p) = pos_of(&mut c, &label) {
+            *p = [x, y];
+        }
+        c.clone()
+    };
+    let _ = save_config_file(&merged);
+    let _ = app.emit("config", &merged);
+}
+
+#[tauri::command]
+fn save_window_size(app: tauri::AppHandle, state: State<AppState>, label: String, w: u32, h: u32) {
+    let merged = {
+        let mut c = state.config.lock().unwrap();
+        if let Some(s) = size_of(&mut c, &label) {
+            *s = [w, h];
         }
         c.clone()
     };
@@ -153,12 +221,8 @@ fn parse(b: &[u8]) -> Telemetry {
         rpm: read_f32(b, 16),
         accel_x: read_f32(b, 20),
         accel_z: read_f32(b, 28),
-        tire_slip: [
-            read_f32(b, 180),
-            read_f32(b, 184),
-            read_f32(b, 188),
-            read_f32(b, 192),
-        ],
+        tire_slip: [read_f32(b, 180), read_f32(b, 184), read_f32(b, 188), read_f32(b, 192)],
+        tire_temp: [read_f32(b, 268), read_f32(b, 272), read_f32(b, 276), read_f32(b, 280)],
         speed_kmh: read_f32(b, 256) * 3.6,
         accel: b[315],
         brake: b[316],
@@ -167,17 +231,8 @@ fn parse(b: &[u8]) -> Telemetry {
     }
 }
 
-fn module_shown(c: &Config, label: &str) -> bool {
-    match label {
-        "main" => true,
-        "inputs" => c.show_inputs,
-        "grip" => c.show_grip,
-        "gforce" => c.show_gforce,
-        _ => false,
-    }
-}
 fn apply_module_visibility(app: &tauri::AppHandle, c: &Config) {
-    for label in ["inputs", "grip", "gforce"] {
+    for label in MODULES {
         if let Some(w) = app.get_webview_window(label) {
             if module_shown(c, label) {
                 let _ = w.show();
@@ -188,9 +243,14 @@ fn apply_module_visibility(app: &tauri::AppHandle, c: &Config) {
     }
 }
 
-/// 放置窗口：有保存位置用之，否则按 (dx,dy) 逻辑偏移在主显示器上排布
-fn place_window(app: &tauri::AppHandle, label: &str, pos: [i32; 2], dx: f64, dy: f64) {
+/// 放置窗口：套用保存的位置/尺寸；位置缺省时按 (dx,dy) 逻辑偏移在主显示器排布
+fn place_window(app: &tauri::AppHandle, c: &mut Config, label: &str, dx: f64, dy: f64) {
     if let Some(w) = app.get_webview_window(label) {
+        let size = size_of(c, label).copied().unwrap_or([0, 0]);
+        if size[0] > 0 {
+            let _ = w.set_size(PhysicalSize::new(size[0], size[1]));
+        }
+        let pos = pos_of(c, label).copied().unwrap_or([-1, -1]);
         if pos[0] >= 0 {
             let _ = w.set_position(PhysicalPosition::new(pos[0], pos[1]));
             return;
@@ -199,9 +259,7 @@ fn place_window(app: &tauri::AppHandle, label: &str, pos: [i32; 2], dx: f64, dy:
             let scale = mon.scale_factor();
             let mp = mon.position();
             let ms = mon.size();
-            let ws = w
-                .outer_size()
-                .unwrap_or(tauri::PhysicalSize::new(400, 200));
+            let ws = w.outer_size().unwrap_or(PhysicalSize::new(400, 200));
             let cx = mp.x + (ms.width as i32 - ws.width as i32) / 2 + (dx * scale) as i32;
             let cy = mp.y + (dy * scale) as i32;
             let _ = w.set_position(PhysicalPosition::new(cx, cy));
@@ -266,7 +324,7 @@ fn spawn_udp_listener(app: tauri::AppHandle, desired: Arc<AtomicU16>) {
 }
 
 fn main() {
-    let cfg = load_config_file();
+    let mut cfg = load_config_file();
     let desired_port = Arc::new(AtomicU16::new(cfg.port));
     let state = AppState {
         config: Mutex::new(cfg.clone()),
@@ -280,20 +338,21 @@ fn main() {
             get_config,
             update_config,
             save_window_pos,
+            save_window_size,
             quit_app
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
 
-            // 排布并显示各窗口（默认错开摆放，用户可拖动）
-            place_window(&handle, "main", cfg.pos_main, 0.0, 40.0);
-            place_window(&handle, "inputs", cfg.pos_inputs, -300.0, 300.0);
-            place_window(&handle, "grip", cfg.pos_grip, 0.0, 300.0);
-            place_window(&handle, "gforce", cfg.pos_gforce, 300.0, 300.0);
+            place_window(&handle, &mut cfg, "main", 0.0, 40.0);
+            place_window(&handle, &mut cfg, "inputs", -450.0, 300.0);
+            place_window(&handle, &mut cfg, "grip", -150.0, 300.0);
+            place_window(&handle, &mut cfg, "gforce", 150.0, 300.0);
+            place_window(&handle, &mut cfg, "tiretemp", 450.0, 300.0);
 
             for label in OVERLAY_WINDOWS {
                 if let Some(w) = app.get_webview_window(label) {
-                    let _ = w.set_ignore_cursor_events(true); // 启动即锁定
+                    let _ = w.set_ignore_cursor_events(true);
                     if module_shown(&cfg, label) {
                         let _ = w.show();
                     }

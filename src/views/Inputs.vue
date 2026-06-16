@@ -1,53 +1,55 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { telemetry as t, config, editMode, initShared } from "../telemetry";
-import { useDragWindow } from "../dragwin";
+import { useOverlayWindow } from "../dragwin";
 
-const { onPointerDown } = useDragWindow();
+const BASE_W = 230;
+const BASE_H = 150;
+const { scale, onDragDown, onResizeDown } = useOverlayWindow(BASE_W);
 onMounted(initShared);
 
 const throttle = computed(() => (t.value ? t.value.accel / 255 : 0));
 const brake = computed(() => (t.value ? t.value.brake / 255 : 0));
-const steer = computed(() => (t.value ? t.value.steer / 127 : 0)); // -1..1
+const steer = computed(() => (t.value ? t.value.steer / 127 : 0));
 const steerDeg = computed(() => steer.value * 120);
 const dimmed = computed(() => t.value != null && !t.value.is_race_on);
 const bg = computed(() => ({ background: `rgba(15, 18, 25, ${config.bg_opacity})` }));
 </script>
 
 <template>
-  <div class="win" :class="{ editing: editMode, dim: dimmed }" :style="bg" @pointerdown="onPointerDown">
-    <div class="content" :style="{ opacity: config.fg_opacity }">
-      <div class="grid">
-        <!-- 踏板 -->
-        <div class="pedal">
-          <div class="bar"><div class="fill thr" :style="{ height: throttle * 100 + '%' }" /></div>
-          <div class="pct">{{ Math.round(throttle * 100) }}</div>
-          <div class="mlabel">油门</div>
-        </div>
-        <div class="pedal">
-          <div class="bar"><div class="fill brk" :style="{ height: brake * 100 + '%' }" /></div>
-          <div class="pct">{{ Math.round(brake * 100) }}</div>
-          <div class="mlabel">刹车</div>
-        </div>
-
-        <!-- 方向盘 -->
-        <div class="steer">
-          <svg viewBox="0 0 100 100" class="wheel" :style="{ transform: `rotate(${steerDeg}deg)` }">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="#6fb3ff" stroke-width="7" opacity="0.9" />
-            <circle cx="50" cy="50" r="9" fill="#6fb3ff" />
-            <line x1="50" y1="50" x2="50" y2="12" stroke="#6fb3ff" stroke-width="6" stroke-linecap="round" />
-            <line x1="50" y1="50" x2="18" y2="64" stroke="#6fb3ff" stroke-width="6" stroke-linecap="round" />
-            <line x1="50" y1="50" x2="82" y2="64" stroke="#6fb3ff" stroke-width="6" stroke-linecap="round" />
-            <circle cx="50" cy="12" r="3.5" fill="#ff5a4d" />
-          </svg>
-          <div class="steertrack">
-            <span class="tick" />
-            <span class="dot" :style="{ left: 50 + steer * 50 + '%' }" />
+  <div class="win" :class="{ editing: editMode, dim: dimmed }" :style="bg" @pointerdown="onDragDown">
+    <div class="scaler" :style="{ transform: `scale(${scale})`, width: BASE_W + 'px', height: BASE_H + 'px' }">
+      <div class="content" :style="{ opacity: config.fg_opacity }">
+        <div class="grid">
+          <div class="pedal">
+            <div class="bar"><div class="fill thr" :style="{ height: throttle * 100 + '%' }" /></div>
+            <div class="pct">{{ Math.round(throttle * 100) }}</div>
+            <div class="mlabel">油门</div>
           </div>
-          <div class="mlabel">转向</div>
+          <div class="pedal">
+            <div class="bar"><div class="fill brk" :style="{ height: brake * 100 + '%' }" /></div>
+            <div class="pct">{{ Math.round(brake * 100) }}</div>
+            <div class="mlabel">刹车</div>
+          </div>
+          <div class="steer">
+            <svg viewBox="0 0 100 100" class="wheel" :style="{ transform: `rotate(${steerDeg}deg)` }">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#6fb3ff" stroke-width="7" opacity="0.9" />
+              <circle cx="50" cy="50" r="9" fill="#6fb3ff" />
+              <line x1="50" y1="50" x2="50" y2="12" stroke="#6fb3ff" stroke-width="6" stroke-linecap="round" />
+              <line x1="50" y1="50" x2="18" y2="64" stroke="#6fb3ff" stroke-width="6" stroke-linecap="round" />
+              <line x1="50" y1="50" x2="82" y2="64" stroke="#6fb3ff" stroke-width="6" stroke-linecap="round" />
+              <circle cx="50" cy="12" r="3.5" fill="#ff5a4d" />
+            </svg>
+            <div class="steertrack">
+              <span class="tick" />
+              <span class="dot" :style="{ left: 50 + steer * 50 + '%' }" />
+            </div>
+            <div class="mlabel">转向</div>
+          </div>
         </div>
       </div>
     </div>
+    <div v-if="editMode" class="resize" @pointerdown="onResizeDown"></div>
   </div>
 </template>
 
@@ -93,7 +95,6 @@ const bg = computed(() => ({ background: `rgba(15, 18, 25, ${config.bg_opacity})
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-
 .steer {
   display: flex;
   flex-direction: column;

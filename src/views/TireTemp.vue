@@ -11,22 +11,33 @@ onMounted(initShared);
 const dimmed = computed(() => t.value != null && !t.value.is_race_on);
 const bg = computed(() => ({ background: `rgba(15, 18, 25, ${config.bg_opacity})` }));
 
-function gripColor(slip: number): string {
-  const s = Math.min(1, Math.max(0, slip / 1.2));
-  const r = Math.round(52 + s * 203);
-  const g = Math.round(227 - s * 160);
-  const b = Math.round(150 - s * 80);
-  return `rgb(${r}, ${g}, ${b})`;
+// 冷(蓝)→最佳(绿)→过热(红)。Forza 胎温量级偏 °F，阈值可后续按实测调。
+function tempColor(temp: number): string {
+  const stops: [number, [number, number, number]][] = [
+    [120, [74, 163, 255]],
+    [200, [52, 227, 154]],
+    [300, [255, 90, 77]],
+  ];
+  if (temp <= stops[0][0]) return rgb(stops[0][1]);
+  if (temp >= stops[2][0]) return rgb(stops[2][1]);
+  const [lo, hi] = temp < stops[1][0] ? [stops[0], stops[1]] : [stops[1], stops[2]];
+  const r = (temp - lo[0]) / (hi[0] - lo[0]);
+  return rgb([
+    Math.round(lo[1][0] + (hi[1][0] - lo[1][0]) * r),
+    Math.round(lo[1][1] + (hi[1][1] - lo[1][1]) * r),
+    Math.round(lo[1][2] + (hi[1][2] - lo[1][2]) * r),
+  ]);
 }
-function slipping(slip: number): boolean {
-  return slip > 0.95;
+function rgb(c: [number, number, number]): string {
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 }
-const slips = computed(() => t.value?.tire_slip ?? [0, 0, 0, 0]);
+
+const temps = computed(() => t.value?.tire_temp ?? [0, 0, 0, 0]);
 const tires = [
-  { x: 14, y: 18, i: 0 },
-  { x: 62, y: 18, i: 1 },
-  { x: 14, y: 92, i: 2 },
-  { x: 62, y: 92, i: 3 },
+  { x: 12, y: 16, i: 0 },
+  { x: 60, y: 16, i: 1 },
+  { x: 12, y: 92, i: 2 },
+  { x: 60, y: 92, i: 3 },
 ];
 </script>
 
@@ -39,14 +50,11 @@ const tires = [
             stroke="rgba(255,255,255,0.18)" stroke-width="1.5" />
           <rect x="36" y="34" width="28" height="40" rx="8" fill="rgba(255,255,255,0.05)" />
           <g v-for="tire in tires" :key="tire.i">
-            <rect
-              :x="tire.x" :y="tire.y" width="24" height="24" rx="6"
-              :fill="gripColor(slips[tire.i])"
-              :class="{ slip: slipping(slips[tire.i]) }"
-            />
+            <rect :x="tire.x" :y="tire.y" width="28" height="26" rx="6" :fill="tempColor(temps[tire.i])" />
+            <text :x="tire.x + 14" :y="tire.y + 17" class="tval">{{ Math.round(temps[tire.i]) }}</text>
           </g>
         </svg>
-        <div class="mlabel">抓地 / GRIP</div>
+        <div class="mlabel">胎温 / TEMP</div>
       </div>
     </div>
     <div v-if="editMode" class="resize" @pointerdown="onResizeDown"></div>
@@ -61,15 +69,13 @@ const tires = [
   gap: 4px;
 }
 .car {
-  width: 100px;
+  width: 104px;
   height: 134px;
 }
-rect.slip {
-  animation: pulse 0.25s steps(1) infinite;
-}
-@keyframes pulse {
-  50% {
-    opacity: 0.55;
-  }
+.tval {
+  fill: #0b0e12;
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
 }
 </style>

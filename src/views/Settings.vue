@@ -2,12 +2,30 @@
 import { onMounted } from "vue";
 import { config, initShared, updateConfig, quitApp } from "../telemetry";
 
-onMounted(initShared);
+let win: { startDragging: () => Promise<void> } | null = null;
+
+onMounted(async () => {
+  await initShared();
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    win = getCurrentWindow() as unknown as typeof win;
+  } catch {}
+});
+
+async function onTitleDown() {
+  if (!win) return;
+  try {
+    await win.startDragging();
+  } catch {}
+}
 </script>
 
 <template>
   <div class="panel">
-    <div class="title">horizon-data · 设置</div>
+    <div class="title" @pointerdown="onTitleDown">
+      <span>horizon-data · 设置</span>
+      <span class="drag-hint">⠿ 拖动</span>
+    </div>
 
     <label class="field">
       <span>数据透明度 {{ Math.round(config.fg_opacity * 100) }}%</span>
@@ -29,14 +47,15 @@ onMounted(initShared);
       </select>
     </label>
 
-    <div class="section">模块（独立窗口）</div>
+    <div class="section">模块（独立窗口，可分别拖动 / 拖右下角缩放）</div>
     <div class="toggles">
       <label><input type="checkbox" v-model="config.show_inputs" @change="updateConfig" /> 输入（油门/刹车/转向）</label>
       <label><input type="checkbox" v-model="config.show_grip" @change="updateConfig" /> 摩擦力 / 抓地</label>
       <label><input type="checkbox" v-model="config.show_gforce" @change="updateConfig" /> G力</label>
+      <label><input type="checkbox" v-model="config.show_tiretemp" @change="updateConfig" /> 轮胎温度</label>
     </div>
 
-    <div class="hint">拖动任意窗口调整位置 · 再按 ⌘/Ctrl+Shift+H 锁定</div>
+    <div class="hint">拖动各窗口调整位置 · 再按 ⌘/Ctrl+Shift+H 锁定</div>
     <button class="quit" @click="quitApp">退出程序</button>
   </div>
 </template>
@@ -45,7 +64,7 @@ onMounted(initShared);
 .panel {
   position: fixed;
   inset: 0;
-  padding: 16px 18px;
+  padding: 0 18px 16px;
   box-sizing: border-box;
   background: rgba(18, 22, 30, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -55,9 +74,23 @@ onMounted(initShared);
   overflow: hidden;
 }
 .title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 -18px 14px;
+  padding: 12px 18px;
   font-weight: 700;
-  margin-bottom: 14px;
   color: #9fd0ff;
+  cursor: grab;
+  background: rgba(255, 255, 255, 0.04);
+}
+.title:active {
+  cursor: grabbing;
+}
+.drag-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: #6f8499;
 }
 .field {
   display: flex;
@@ -84,7 +117,7 @@ onMounted(initShared);
 .section {
   margin: 6px 0 8px;
   font-size: 11px;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   color: #7e93a8;
 }
 .toggles {

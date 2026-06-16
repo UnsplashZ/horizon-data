@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { telemetry as t, config, editMode, initShared, gearLabel } from "../telemetry";
-import { useDragWindow } from "../dragwin";
+import { useOverlayWindow } from "../dragwin";
 
-const { onPointerDown } = useDragWindow();
+const BASE_W = 520;
+const BASE_H = 150;
+const { scale, onDragDown, onResizeDown } = useOverlayWindow(BASE_W);
 onMounted(initShared);
 
 const SEG = 16;
@@ -28,38 +30,41 @@ const bg = computed(() => ({ background: `rgba(15, 18, 25, ${config.bg_opacity})
 </script>
 
 <template>
-  <div class="win" :class="{ editing: editMode, dim: dimmed }" :style="bg" @pointerdown="onPointerDown">
-    <div class="content" :style="{ opacity: config.fg_opacity }">
-      <template v-if="t">
-        <div class="shiftlights" :class="{ flash: nearRedline }">
-          <span
-            v-for="i in SEG"
-            :key="i"
-            class="seg"
-            :style="{
-              background: i <= litSegments ? segColor(i - 1) : 'rgba(255,255,255,0.08)',
-              boxShadow: i <= litSegments ? `0 0 6px ${segColor(i - 1)}` : 'none',
-            }"
-          />
+  <div class="win" :class="{ editing: editMode, dim: dimmed }" :style="bg" @pointerdown="onDragDown">
+    <div class="scaler" :style="{ transform: `scale(${scale})`, width: BASE_W + 'px', height: BASE_H + 'px' }">
+      <div class="content" :style="{ opacity: config.fg_opacity }">
+        <template v-if="t">
+          <div class="shiftlights" :class="{ flash: nearRedline }">
+            <span
+              v-for="i in SEG"
+              :key="i"
+              class="seg"
+              :style="{
+                background: i <= litSegments ? segColor(i - 1) : 'rgba(255,255,255,0.08)',
+                boxShadow: i <= litSegments ? `0 0 6px ${segColor(i - 1)}` : 'none',
+              }"
+            />
+          </div>
+          <div class="row">
+            <div class="cell">
+              <div class="num">{{ speedDisplay }}</div>
+              <div class="unit">{{ speedUnit }}</div>
+            </div>
+            <div class="gearwrap">
+              <div class="gear" :class="{ redline: nearRedline }">{{ gearLabel(t.gear) }}</div>
+            </div>
+            <div class="cell">
+              <div class="num small" :class="{ redline: nearRedline }">{{ Math.round(t.rpm) }}</div>
+              <div class="unit">RPM</div>
+            </div>
+          </div>
+        </template>
+        <div v-else class="waiting">
+          等待遥测数据…<br />FH6 → Data Out 指向本机 <b>:{{ config.port }}</b>
         </div>
-        <div class="row">
-          <div class="cell">
-            <div class="num">{{ speedDisplay }}</div>
-            <div class="unit">{{ speedUnit }}</div>
-          </div>
-          <div class="gearwrap">
-            <div class="gear" :class="{ redline: nearRedline }">{{ gearLabel(t.gear) }}</div>
-          </div>
-          <div class="cell">
-            <div class="num small" :class="{ redline: nearRedline }">{{ Math.round(t.rpm) }}</div>
-            <div class="unit">RPM</div>
-          </div>
-        </div>
-      </template>
-      <div v-else class="waiting">
-        等待遥测数据…<br />FH6 → Data Out 指向本机 <b>:{{ config.port }}</b>
       </div>
     </div>
+    <div v-if="editMode" class="resize" @pointerdown="onResizeDown"></div>
   </div>
 </template>
 
@@ -141,5 +146,6 @@ const bg = computed(() => ({ background: `rgba(15, 18, 25, ${config.bg_opacity})
   line-height: 1.7;
   text-align: center;
   color: #cdd9e5;
+  margin: auto;
 }
 </style>
