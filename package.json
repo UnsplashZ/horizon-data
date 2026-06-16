@@ -1,0 +1,11 @@
+{
+  "name": "horizon-data",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Forza Horizon 6 transparent overlay HUD reading UDP Data Out telemetry.",
+  "scripts": {
+    "listen": "node tools/udp-listen.ts",
+    "fake": "node tools/fake-send.ts"
+  }
+}
