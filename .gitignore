@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node / 前端
+node_modules/
+dist/
+.output/
+.nuxt/
+
+# Tauri / Rust
+src-tauri/target/
+target/
+
+# 本地配置 / 录制
+*.local
+local.settings.json
+recordings/
+
+# OS / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
