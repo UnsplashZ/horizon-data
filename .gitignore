@@ -12,6 +12,7 @@ dist/
 
 # Tauri / Rust
 src-tauri/target/
+src-tauri/gen/
 target/
 
 # 本地配置 / 录制
