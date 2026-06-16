@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "覆盖窗口的默认能力",
   "windows": ["overlay"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "global-shortcut:default"]
 }
