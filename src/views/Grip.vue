@@ -4,8 +4,8 @@ import { telemetry as t, config, editMode, initShared } from "../telemetry";
 import { useOverlayWindow } from "../dragwin";
 
 const BASE_W = 190;
-const BASE_H = 175;
-const { scale, onDragDown, onResizeDown } = useOverlayWindow(BASE_W);
+const BASE_H = 150;
+const { scale, onDragDown, onResizeDown } = useOverlayWindow(BASE_W, BASE_H);
 onMounted(initShared);
 
 const dimmed = computed(() => t.value != null && !t.value.is_race_on);
@@ -31,9 +31,14 @@ const tires = [
 </script>
 
 <template>
-  <div class="win" :class="{ editing: editMode, dim: dimmed }" :style="bg" @pointerdown="onDragDown">
-    <div class="scaler" :style="{ transform: `scale(${scale})`, width: BASE_W + 'px', height: BASE_H + 'px' }">
-      <div class="content" :style="{ opacity: config.fg_opacity }">
+  <div class="win" :class="{ editing: editMode, dim: dimmed }" :style="bg">
+    <div class="scaler" :style="{
+      transform: `scale(${scale})`,
+      width: BASE_W + 'px',
+      height: BASE_H + 'px',
+      transformOrigin: 'top left'
+    }">
+      <div class="content" :style="{ opacity: config.fg_opacity }" @pointerdown="onDragDown">
         <svg viewBox="0 0 100 134" class="car">
           <rect x="28" y="10" width="44" height="114" rx="16" fill="rgba(255,255,255,0.06)"
             stroke="rgba(255,255,255,0.18)" stroke-width="1.5" />
@@ -59,6 +64,9 @@ const tires = [
   align-items: center;
   justify-content: center;
   gap: 4px;
+}
+.editing .content {
+  cursor: move;
 }
 .car {
   width: 100px;

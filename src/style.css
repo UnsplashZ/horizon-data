@@ -9,40 +9,49 @@ body,
 }
 
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Consolas", "SF Mono", "Monaco", monospace;
   color: #fff;
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 通用覆盖窗口外框（各模块共用）。
-   窗口本身是方的，外投影会被裁出深色直角 → 不用外投影，只用边框+内高光。 */
+/* 真实 F1 风格窗口 - 纯黑背景，无边框 */
 .win {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border-radius: 0;
   box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.95);
+  border: none;
 }
+
 .win.editing {
   cursor: grab;
-  border-color: rgba(120, 200, 255, 0.9);
-  box-shadow: inset 0 0 0 1px rgba(120, 200, 255, 0.5);
+  border: 1px solid #00ff00;
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
 }
+
 .win.editing:active {
   cursor: grabbing;
 }
+
 .win.dim {
-  filter: saturate(0.6) brightness(0.82);
+  filter: saturate(0.5) brightness(0.7);
+  opacity: 0.8;
 }
 
 /* 内容按基准尺寸排版，再整体等比缩放填满窗口 */
 .scaler {
   transform-origin: top left;
+  width: 100%;
+  height: 100%;
+  display: flex;
 }
+
 .content {
   width: 100%;
   height: 100%;
@@ -51,21 +60,30 @@ body {
   flex-direction: column;
 }
 
-/* 编辑模式右下角缩放柄 */
+/* 缩放柄 */
 .resize {
   position: fixed;
   right: 0;
   bottom: 0;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   cursor: nwse-resize;
-  background: linear-gradient(135deg, transparent 50%, rgba(120, 200, 255, 0.9) 50%);
-  border-bottom-right-radius: 14px;
+  background: linear-gradient(135deg, transparent 50%, #00ff00 51%);
+  border-bottom-right-radius: 2px;
 }
 
+.resize:hover {
+  background: linear-gradient(135deg, transparent 50%, #00ff00 51%);
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+/* 模块标签 */
 .mlabel {
   font-size: 10px;
+  font-weight: 700;
   letter-spacing: 2px;
-  color: #8aa0b6;
+  text-transform: uppercase;
+  color: #888;
   text-align: center;
+  font-family: "Consolas", monospace;
 }

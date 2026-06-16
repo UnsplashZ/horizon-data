@@ -3,18 +3,21 @@ import { editMode, tauri } from "./telemetry";
 
 /**
  * 覆盖窗口通用行为：编辑模式下拖动移动 / 拖角缩放，并把位置和尺寸持久化；
- * 同时根据窗口宽度返回整体缩放比例（内容按基准尺寸等比缩放）。
+ * 同时根据窗口宽高返回整体缩放比例（内容按基准尺寸等比缩放）。
  *
  * 关键：窗口 API 在 onMounted 预加载好，拖动/缩放在 pointerdown 中同步发起，
  * 否则 macOS 上动作会因 await import 的延迟而失效。
  */
-export function useOverlayWindow(baseWidth: number) {
+export function useOverlayWindow(baseWidth: number, baseHeight?: number) {
   const scale = ref(1);
   let win: { label: string; startDragging: () => Promise<void>; startResizeDragging: (d: string) => Promise<void> } | null =
     null;
 
   function recompute() {
-    scale.value = window.innerWidth / baseWidth;
+    // 根据宽高比例取较小值，保持内容不超出窗口
+    const scaleX = window.innerWidth / baseWidth;
+    const scaleY = baseHeight ? window.innerHeight / baseHeight : scaleX;
+    scale.value = Math.min(scaleX, scaleY);
   }
 
   async function onDragDown() {

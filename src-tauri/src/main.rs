@@ -17,8 +17,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const PACKET_SIZE: usize = 324;
 static EDITING: AtomicBool = AtomicBool::new(false);
-const OVERLAY_WINDOWS: [&str; 5] = ["main", "inputs", "grip", "gforce", "tiretemp"];
-const MODULES: [&str; 4] = ["inputs", "grip", "gforce", "tiretemp"];
+const OVERLAY_WINDOWS: [&str; 1] = ["main"];
+const MODULES: [&str; 5] = ["inputs", "tireinfo", "gforce", "grip", "tiretemp"];
 
 #[derive(Serialize, Clone)]
 struct Telemetry {
@@ -43,20 +43,11 @@ struct Config {
     bg_opacity: f32,
     fg_opacity: f32,
     units: String,
-    show_inputs: bool,
-    show_grip: bool,
-    show_gforce: bool,
-    show_tiretemp: bool,
-    pos_main: [i32; 2], // 物理像素；[-1,-1]=首次自动排布
-    pos_inputs: [i32; 2],
-    pos_grip: [i32; 2],
-    pos_gforce: [i32; 2],
-    pos_tiretemp: [i32; 2],
-    size_main: [u32; 2], // 物理像素；[0,0]=用配置默认尺寸
-    size_inputs: [u32; 2],
-    size_grip: [u32; 2],
-    size_gforce: [u32; 2],
-    size_tiretemp: [u32; 2],
+    show_tires: bool,   // 统一仪表盘中的轮胎模块
+    show_inputs: bool,  // 统一仪表盘中的输入模块
+    show_gforce: bool,  // 统一仪表盘中的G力模块
+    pos_main: [i32; 2],
+    size_main: [u32; 2],
 }
 impl Default for Config {
     fn default() -> Self {
@@ -65,20 +56,11 @@ impl Default for Config {
             bg_opacity: 0.72,
             fg_opacity: 1.0,
             units: "kmh".into(),
+            show_tires: true,
             show_inputs: false,
-            show_grip: false,
             show_gforce: false,
-            show_tiretemp: false,
             pos_main: [-1, -1],
-            pos_inputs: [-1, -1],
-            pos_grip: [-1, -1],
-            pos_gforce: [-1, -1],
-            pos_tiretemp: [-1, -1],
             size_main: [0, 0],
-            size_inputs: [0, 0],
-            size_grip: [0, 0],
-            size_gforce: [0, 0],
-            size_tiretemp: [0, 0],
         }
     }
 }
@@ -109,32 +91,17 @@ fn save_config_file(c: &Config) -> Result<(), String> {
 fn pos_of<'a>(c: &'a mut Config, label: &str) -> Option<&'a mut [i32; 2]> {
     match label {
         "main" => Some(&mut c.pos_main),
-        "inputs" => Some(&mut c.pos_inputs),
-        "grip" => Some(&mut c.pos_grip),
-        "gforce" => Some(&mut c.pos_gforce),
-        "tiretemp" => Some(&mut c.pos_tiretemp),
         _ => None,
     }
 }
 fn size_of<'a>(c: &'a mut Config, label: &str) -> Option<&'a mut [u32; 2]> {
     match label {
         "main" => Some(&mut c.size_main),
-        "inputs" => Some(&mut c.size_inputs),
-        "grip" => Some(&mut c.size_grip),
-        "gforce" => Some(&mut c.size_gforce),
-        "tiretemp" => Some(&mut c.size_tiretemp),
         _ => None,
     }
 }
-fn module_shown(c: &Config, label: &str) -> bool {
-    match label {
-        "main" => true,
-        "inputs" => c.show_inputs,
-        "grip" => c.show_grip,
-        "gforce" => c.show_gforce,
-        "tiretemp" => c.show_tiretemp,
-        _ => false,
-    }
+fn module_shown(_c: &Config, label: &str) -> bool {
+    label == "main"
 }
 
 #[tauri::command]
@@ -147,19 +114,11 @@ fn update_config(app: tauri::AppHandle, state: State<AppState>, config: Config) 
     // 位置/尺寸只由拖动写入，设置面板更新不得覆盖
     let merged = {
         let mut c = state.config.lock().unwrap();
-        let positions = (c.pos_main, c.pos_inputs, c.pos_grip, c.pos_gforce, c.pos_tiretemp);
-        let sizes = (c.size_main, c.size_inputs, c.size_grip, c.size_gforce, c.size_tiretemp);
+        let pos_main = c.pos_main;
+        let size_main = c.size_main;
         *c = config;
-        c.pos_main = positions.0;
-        c.pos_inputs = positions.1;
-        c.pos_grip = positions.2;
-        c.pos_gforce = positions.3;
-        c.pos_tiretemp = positions.4;
-        c.size_main = sizes.0;
-        c.size_inputs = sizes.1;
-        c.size_grip = sizes.2;
-        c.size_gforce = sizes.3;
-        c.size_tiretemp = sizes.4;
+        c.pos_main = pos_main;
+        c.size_main = size_main;
         c.clone()
     };
     save_config_file(&merged)?;
@@ -260,8 +219,14 @@ fn place_window(app: &tauri::AppHandle, c: &mut Config, label: &str, dx: f64, dy
             let mp = mon.position();
             let ms = mon.size();
             let ws = w.outer_size().unwrap_or(PhysicalSize::new(400, 200));
+            // 水平：相对于屏幕中心，负数向左，正数向右
             let cx = mp.x + (ms.width as i32 - ws.width as i32) / 2 + (dx * scale) as i32;
-            let cy = mp.y + (dy * scale) as i32;
+            // 垂直：负数从底部向上，正数从顶部向下
+            let cy = if dy < 0.0 {
+                mp.y + ms.height as i32 - ws.height as i32 + (dy * scale) as i32
+            } else {
+                mp.y + (dy * scale) as i32
+            };
             let _ = w.set_position(PhysicalPosition::new(cx, cy));
         }
     }
@@ -344,10 +309,16 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle().clone();
 
-            place_window(&handle, &mut cfg, "main", 0.0, 40.0);
-            place_window(&handle, &mut cfg, "inputs", -450.0, 300.0);
+            // 默认布局：
+            // - 主仪表在屏幕底部中心
+            // - 输入在主仪表左侧
+            // - G力在主仪表右侧
+            // - 轮胎信息在屏幕左侧
+            place_window(&handle, &mut cfg, "main", 0.0, -200.0);
+            place_window(&handle, &mut cfg, "inputs", -280.0, -200.0);
+            place_window(&handle, &mut cfg, "gforce", 280.0, -200.0);
+            place_window(&handle, &mut cfg, "tireinfo", -600.0, -120.0);
             place_window(&handle, &mut cfg, "grip", -150.0, 300.0);
-            place_window(&handle, &mut cfg, "gforce", 150.0, 300.0);
             place_window(&handle, &mut cfg, "tiretemp", 450.0, 300.0);
 
             for label in OVERLAY_WINDOWS {

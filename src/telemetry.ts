@@ -20,20 +20,11 @@ export interface Config {
   bg_opacity: number;
   fg_opacity: number;
   units: string;
-  show_inputs: boolean;
-  show_grip: boolean;
-  show_gforce: boolean;
-  show_tiretemp: boolean;
+  show_tires: boolean;   // 统一仪表盘中的轮胎模块
+  show_inputs: boolean;  // 统一仪表盘中的输入模块
+  show_gforce: boolean;  // 统一仪表盘中的G力模块
   pos_main: number[];
-  pos_inputs: number[];
-  pos_grip: number[];
-  pos_gforce: number[];
-  pos_tiretemp: number[];
   size_main: number[];
-  size_inputs: number[];
-  size_grip: number[];
-  size_gforce: number[];
-  size_tiretemp: number[];
 }
 
 export const telemetry = ref<Telemetry | null>(null);
@@ -43,20 +34,11 @@ export const config = reactive<Config>({
   bg_opacity: 0.72,
   fg_opacity: 1.0,
   units: "kmh",
+  show_tires: true,
   show_inputs: false,
-  show_grip: false,
   show_gforce: false,
-  show_tiretemp: false,
   pos_main: [-1, -1],
-  pos_inputs: [-1, -1],
-  pos_grip: [-1, -1],
-  pos_gforce: [-1, -1],
-  pos_tiretemp: [-1, -1],
   size_main: [0, 0],
-  size_inputs: [0, 0],
-  size_grip: [0, 0],
-  size_gforce: [0, 0],
-  size_tiretemp: [0, 0],
 });
 
 type Invoke = <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
