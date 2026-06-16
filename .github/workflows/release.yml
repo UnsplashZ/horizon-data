@@ -1,0 +1,61 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target universal-apple-darwin --bundles app,dmg"
+            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+          - platform: windows-latest
+            args: "--bundles nsis"
+            rust_targets: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build & release (Tauri)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('dev-{0}', github.run_number) }}
+          releaseName: "horizon-data ${{ github.ref_type == 'tag' && github.ref_name || format('dev-{0}', github.run_number) }}"
+          releaseBody: |
+            Dev 测试版（未签名）。
+            - Windows: 下载 `*-setup.exe`（NSIS 安装版）
+            - macOS: 下载 `*.dmg`（universal，Intel/Apple Silicon 通用）
+
+            首次运行：macOS 右键打开绕过 Gatekeeper；Windows 在 SmartScreen 点“仍要运行”。
+            使用：进入 FH6 → Data Out 指向本机/局域网 IP:5300；⌘/Ctrl+Shift+H 进入编辑模式。
+          prerelease: true
+          args: ${{ matrix.args }}
