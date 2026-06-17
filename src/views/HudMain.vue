@@ -49,8 +49,9 @@ const INPUT_SEG = 192;
 const INPUT_TOP_GAP = 8;
 const INPUT_SPAN = (SPAN - INPUT_TOP_GAP) / 2;
 const BODY_PATH =
-  "M220.4,38.7 C232,45 242,55 258,55 L402,55 C418,55 428,45 439.6,38.7 " +
-  "A72,72 0 1 1 439.6,169.3 C424,164 410,164 392,164 L268,164 C250,164 236,164 220.4,169.3 " +
+  "M220.4,38.7 C232,44.1 246,55 258,55 L402,55 C414,55 428,44.1 439.6,38.7 " +
+  "A72,72 0 1 1 439.6,169.3 C429,164.4 420,164 408,164 " +
+  "L252,164 C240,164 231,164.4 220.4,169.3 " +
   "A72,72 0 1 1 220.4,38.7 Z";
 
 function arcPt(deg: number): [number, number] {
@@ -114,11 +115,9 @@ const rpmPct = computed(() =>
 const litBars = computed(() => Math.round(rpmPct.value * ARC_SEG));
 const litLeds = computed(() => Math.round(rpmPct.value * SEG));
 const redline = computed(() => rpmPct.value >= 0.9);
-const glowColor = computed(() => revColor(rpmPct.value));
-const glowStyle = computed(() => ({
-  filter: `drop-shadow(0 0 8px ${glowColor.value}) drop-shadow(0 0 18px ${glowColor.value})`,
-}));
 const panelOpacity = computed(() => config.bg_opacity);
+const panelSoftOpacity = computed(() => Math.min(0.34, config.bg_opacity * 0.82));
+const panelCoreOpacity = computed(() => config.bg_opacity * 0.5);
 
 // ---- 速度 / 档位 ----
 const speedDisplay = computed(() => {
@@ -137,7 +136,7 @@ const litBrakeBars = computed(() => Math.round((brake.value / 100) * INPUT_SEG))
 const litThrottleBars = computed(() => Math.round((throttle.value / 100) * INPUT_SEG));
 const steerOffset = computed(() => {
   const s = t.value ? Math.max(-1, Math.min(1, t.value.steer / 127)) : 0;
-  return s * 42; // 与预览一致：指示点在轨道内 ±42%
+  return s * 47.8;
 });
 
 // ---- 轮胎：底色按抓地（tire_slip），数字显示胎温（°C） ----
@@ -191,6 +190,9 @@ const dotY = computed(() => {
               <filter id="soft-frame-blur" x="-18%" y="-26%" width="136%" height="152%">
                 <feGaussianBlur stdDeviation="6.5" />
               </filter>
+              <filter id="panel-soft-edge" x="-10%" y="-18%" width="120%" height="136%">
+                <feGaussianBlur stdDeviation="2.4" />
+              </filter>
               <radialGradient
                 id="body-dark-scrim"
                 gradientUnits="userSpaceOnUse"
@@ -209,12 +211,11 @@ const dotY = computed(() => {
                 <stop offset="1" stop-color="#000000" stop-opacity="0" />
               </radialGradient>
             </defs>
-            <!-- Soft Frame：保留功能泛光，弱化结构实线 -->
-            <path :d="BODY_PATH" fill="none" :stroke="glowColor" stroke-width="12" opacity=".14" filter="url(#soft-frame-blur)" />
-            <path :d="BODY_PATH" fill="none" :stroke="glowColor" stroke-width="1.5" opacity=".16" :style="glowStyle" />
+            <!-- Soft Frame：关闭主体外轮廓泛光，只保留软背板 -->
             <!-- 半透明主体，透明度受 bg_opacity 控制 -->
-            <path :d="BODY_PATH" fill="#11161e" :opacity="panelOpacity" />
-            <path :d="BODY_PATH" fill="url(#body-dark-scrim)" opacity=".72" />
+            <path :d="BODY_PATH" fill="#11161e" :opacity="panelSoftOpacity" filter="url(#panel-soft-edge)" />
+            <path :d="BODY_PATH" fill="url(#body-dark-scrim)" opacity=".5" filter="url(#panel-soft-edge)" />
+            <path :d="BODY_PATH" fill="#11161e" :opacity="panelCoreOpacity" />
             <!-- 转速渐变弧 -->
             <g>
               <path :d="arcTrack" fill="none" stroke="#20242c" stroke-width="6.25" stroke-linecap="round" opacity=".8" />
@@ -296,7 +297,6 @@ const dotY = computed(() => {
           <!-- 转向 -->
           <div v-if="config.show_inputs" class="ov center-steer" style="left: 330px; top: 145px; transform: translateX(-50%)">
             <div class="steer-track"><div class="steer-ind" :style="{ left: `calc(50% + ${steerOffset}%)` }"></div></div>
-            <div class="steer-lbl">STEER</div>
           </div>
 
           <!-- 速度 -->
@@ -469,14 +469,6 @@ const dotY = computed(() => {
   transform: translateX(-50%);
   transition: left 0.06s linear;
 }
-.steer-lbl {
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 2px;
-  color: #5f6b7a;
-  margin-top: 3px;
-}
-
 /* 中央转向条 */
 .center-steer {
   width: 122px;
@@ -547,10 +539,12 @@ const dotY = computed(() => {
   left: 0;
   right: 0;
   top: 58px;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
-  font-weight: 600;
-  color: #8a93a0;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: #aeb7c4;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
 }
 
 /* 等待状态 */
