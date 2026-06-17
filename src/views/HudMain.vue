@@ -3,93 +3,104 @@ import { computed, onMounted } from "vue";
 import { telemetry as t, config, editMode, initShared } from "../telemetry";
 import { useOverlayWindow } from "../dragwin";
 
-const BASE_W = 800;
-const BASE_H = 200;
+// 基准画布尺寸与 design-preview-halo.html 的 viewBox 一致
+const BASE_W = 660;
+const BASE_H = 204;
 const { scale, onDragDown, onResizeDown } = useOverlayWindow(BASE_W, BASE_H);
 onMounted(initShared);
 
 const dimmed = computed(() => t.value != null && !t.value.is_race_on);
-const bg = computed(() => ({ background: `rgba(0, 0, 0, ${config.bg_opacity})` }));
 
-const SEG = 16;
+// ---- 转速分区配色（绿→黄→橙→红插值），换挡灯 / 渐变弧 / 外发光共用 ----
+const RPM_STOPS: [number, number, number][] = [
+  [31, 223, 95],
+  [255, 224, 0],
+  [255, 138, 0],
+  [255, 45, 45],
+];
+function lerp(a: number, b: number, f: number): number {
+  return Math.round(a + (b - a) * f);
+}
+function revColor(p: number): string {
+  p = Math.min(1, Math.max(0, p));
+  const s = p * 3;
+  const i = Math.min(2, Math.floor(s));
+  const f = s - i;
+  const a = RPM_STOPS[i];
+  const b = RPM_STOPS[i + 1];
+  return `rgb(${lerp(a[0], b[0], f)}, ${lerp(a[1], b[1], f)}, ${lerp(a[2], b[2], f)})`;
+}
+
+// ---- 转速渐变弧几何（左圆环） ----
+const CX = 190;
+const CY = 104;
+const ARC_R = 54;
+const A0 = 135;
+const SPAN = 270;
+const ARC_SEG = 256;
+const BODY_PATH =
+  "M220.4,38.7 Q232.7,46 252.7,46 L407.3,46 Q427.3,46 439.6,38.7 " +
+  "A72,72 0 1 1 439.6,169.3 Q427.3,162 407.3,162 L252.7,162 Q232.7,162 220.4,169.3 " +
+  "A72,72 0 1 1 220.4,38.7 Z";
+
+function arcPt(deg: number): [number, number] {
+  const r = (deg * Math.PI) / 180;
+  return [CX + ARC_R * Math.cos(r), CY + ARC_R * Math.sin(r)];
+}
+function arcSeg(a1: number, a2: number): string {
+  const [x1, y1] = arcPt(a1);
+  const [x2, y2] = arcPt(a2);
+  const large = a2 - a1 > 180 ? 1 : 0;
+  return `M${x1},${y1} A${ARC_R},${ARC_R} 0 ${large} 1 ${x2},${y2}`;
+}
+const arcTrack = arcSeg(A0, A0 + SPAN);
+const arcBars = Array.from({ length: ARC_SEG }, (_, i) => {
+  const gap = 0.08;
+  const a1 = A0 + (SPAN * i) / ARC_SEG + gap / 2;
+  const a2 = A0 + (SPAN * (i + 1)) / ARC_SEG - gap / 2;
+  return { d: arcSeg(a1, a2), color: revColor(i / (ARC_SEG - 1)) };
+});
+
+// ---- 换挡灯 ----
+const SEG = 13;
+const ledColors = Array.from({ length: SEG }, (_, i) => revColor(i / (SEG - 1)));
+
+// ---- 转速派生量 ----
 const rpmPct = computed(() =>
   t.value && t.value.max_rpm > 0 ? Math.min(1, Math.max(0, t.value.rpm / t.value.max_rpm)) : 0,
 );
-const litSegments = computed(() => Math.round(rpmPct.value * SEG));
-const nearRedline = computed(() => rpmPct.value > 0.90);
+const litBars = computed(() => Math.round(rpmPct.value * ARC_SEG));
+const litLeds = computed(() => Math.round(rpmPct.value * SEG));
+const redline = computed(() => rpmPct.value >= 0.9);
+const glowColor = computed(() => revColor(rpmPct.value));
+const glowStyle = computed(() => ({
+  filter: `drop-shadow(0 0 4px ${glowColor.value}) drop-shadow(0 0 12px ${glowColor.value})`,
+}));
+const panelOpacity = computed(() => config.bg_opacity);
 
-// 根据实际转速比例标色：60% 绿，85% 黄，100% 红
-function segColor(i: number): string {
-  const p = i / SEG;
-  if (p < 0.6) return "#00ff00"; // 0-60% 绿色
-  if (p < 0.85) return "#ffff00"; // 60-85% 黄色
-  return "#ff0000"; // 85-100% 红色
-}
-
+// ---- 速度 / 档位 ----
 const speedDisplay = computed(() => {
   if (!t.value) return 0;
   return Math.round(config.units === "mph" ? t.value.speed_kmh * 0.621371 : t.value.speed_kmh);
 });
 const speedUnit = computed(() => (config.units === "mph" ? "MPH" : "KMH"));
-
 function gearLabel(g: number): string {
   return g === 0 ? "R" : g === 11 ? "N" : String(g);
 }
 
-// G力数据（m/s² 转换为 G，限制 ±3G）
-const gx = computed(() => {
-  const g = (t.value?.accel_x ?? 0) / 9.8;
-  return Math.max(-3, Math.min(3, g)).toFixed(2);
-});
-const gz = computed(() => {
-  const g = (t.value?.accel_z ?? 0) / 9.8;
-  return Math.max(-3, Math.min(3, g)).toFixed(2);
-});
-const gTotal = computed(() => {
-  const gx = (t.value?.accel_x ?? 0) / 9.8;
-  const gz = (t.value?.accel_z ?? 0) / 9.8;
-  const total = Math.sqrt(gx * gx + gz * gz);
-  return total.toFixed(2);
-});
-const dotX = computed(() => {
-  const g = (t.value?.accel_x ?? 0) / 9.8;
-  const clamped = Math.max(-3, Math.min(3, g));
-  return 50 + (clamped / 3) * 45;
-});
-const dotY = computed(() => {
-  const g = (t.value?.accel_z ?? 0) / 9.8;
-  const clamped = Math.max(-3, Math.min(3, g));
-  return 50 - (clamped / 3) * 45;
+// ---- 油门 / 刹车 / 转向 ----
+const throttle = computed(() => (t.value ? Math.round((t.value.accel / 255) * 100) : 0));
+const brake = computed(() => (t.value ? Math.round((t.value.brake / 255) * 100) : 0));
+const steerOffset = computed(() => {
+  const s = t.value ? Math.max(-1, Math.min(1, t.value.steer / 127)) : 0;
+  return s * 42; // 与预览一致：指示点在轨道内 ±42%
 });
 
-// 胎温
+// ---- 轮胎：底色按抓地（tire_slip），数字显示胎温（°C） ----
 function fahrenheitToCelsius(f: number): number {
-  return (f - 32) * 5 / 9;
+  return ((f - 32) * 5) / 9;
 }
-function tempColor(tempC: number): string {
-  const stops: [number, [number, number, number]][] = [
-    [49, [74, 163, 255]],
-    [93, [52, 227, 154]],
-    [149, [255, 90, 77]],
-  ];
-  if (tempC <= stops[0][0]) return rgb(stops[0][1]);
-  if (tempC >= stops[2][0]) return rgb(stops[2][1]);
-  const [lo, hi] = tempC < stops[1][0] ? [stops[0], stops[1]] : [stops[1], stops[2]];
-  const r = (tempC - lo[0]) / (hi[0] - lo[0]);
-  return rgb([
-    Math.round(lo[1][0] + (hi[1][0] - lo[1][0]) * r),
-    Math.round(lo[1][1] + (hi[1][1] - lo[1][1]) * r),
-    Math.round(lo[1][2] + (hi[1][2] - lo[1][2]) * r),
-  ]);
-}
-function rgb(c: [number, number, number]): string {
-  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
-}
-const temps = computed(() =>
-  (t.value?.tire_temp ?? [0, 0, 0, 0]).map(f => Math.round(fahrenheitToCelsius(f)))
-);
-
-// 抓地力
+// 正常绿 (52,227,150) → 完全失去抓地红 (255,67,70)；tire_slip≈1.2 视为彻底打滑
 function gripColor(slip: number): string {
   const s = Math.min(1, Math.max(0, slip / 1.2));
   const r = Math.round(52 + s * 203);
@@ -97,112 +108,145 @@ function gripColor(slip: number): string {
   const b = Math.round(150 - s * 80);
   return `rgb(${r}, ${g}, ${b})`;
 }
-function slipping(slip: number): boolean {
-  return slip > 0.95;
-}
+const temps = computed(() =>
+  (t.value?.tire_temp ?? [0, 0, 0, 0]).map((f) => Math.round(fahrenheitToCelsius(f))),
+);
 const slips = computed(() => t.value?.tire_slip ?? [0, 0, 0, 0]);
 
-const tires = [
-  { i: 0, label: "FL" },
-  { i: 1, label: "FR" },
-  { i: 2, label: "RL" },
-  { i: 3, label: "RR" },
-];
-
-const steerAngle = computed(() => (t.value ? (t.value.steer / 127) * 450 : 0));
+// ---- G 力 ----
+const gTotal = computed(() => {
+  const x = (t.value?.accel_x ?? 0) / 9.8;
+  const z = (t.value?.accel_z ?? 0) / 9.8;
+  return Math.sqrt(x * x + z * z).toFixed(1);
+});
+const dotX = computed(() => {
+  const g = (t.value?.accel_x ?? 0) / 9.8;
+  return 50 + Math.max(-1, Math.min(1, g / 1.5)) * 42;
+});
+const dotY = computed(() => {
+  const g = (t.value?.accel_z ?? 0) / 9.8;
+  return 50 - Math.max(-1, Math.min(1, g / 1.5)) * 42;
+});
 </script>
 
 <template>
-  <div class="win" :class="{ editing: editMode, dim: dimmed }" :style="bg">
-    <div class="scaler" :style="{
-      transform: `scale(${scale})`,
-      width: BASE_W + 'px',
-      height: BASE_H + 'px',
-      transformOrigin: 'top left'
-    }">
-      <div class="content" :style="{ opacity: config.fg_opacity }" @pointerdown="onDragDown">
+  <div class="win" :class="{ editing: editMode, dim: dimmed }">
+    <div
+      class="scaler"
+      :style="{
+        transform: `scale(${scale})`,
+        width: BASE_W + 'px',
+        height: BASE_H + 'px',
+        transformOrigin: 'top left',
+      }"
+    >
+      <div class="wrap" :style="{ opacity: config.fg_opacity }" @pointerdown="onDragDown">
         <template v-if="t">
-          <!-- 顶部换挡灯条 -->
-          <div class="shift-bar" :title="`RPM: ${Math.round(t.rpm)}/${Math.round(t.max_rpm)} (${(rpmPct * 100).toFixed(1)}%) nearRedline: ${nearRedline}`">
+          <svg class="layer" :viewBox="`0 0 ${BASE_W} ${BASE_H}`">
+            <!-- 外发光（贴轮廓，画在主体下层只透出光晕） -->
+            <path :d="BODY_PATH" fill="none" :stroke="glowColor" stroke-width="2" opacity=".46" :style="glowStyle" />
+            <!-- 半透明主体，透明度受 bg_opacity 控制 -->
+            <path :d="BODY_PATH" fill="#11161e" :opacity="panelOpacity" />
+            <!-- 描边收口 -->
+            <path :d="BODY_PATH" fill="none" stroke="#2a323d" stroke-width="2.5" opacity=".82" />
+            <!-- 左右大圆环外圈 -->
+            <circle cx="190" cy="104" r="70" fill="none" stroke="#2a323d" stroke-width="2" />
+            <circle cx="470" cy="104" r="70" fill="none" stroke="#2a323d" stroke-width="2" />
+            <!-- 转速渐变弧 -->
+            <g>
+              <path :d="arcTrack" fill="none" stroke="#20242c" stroke-width="7" stroke-linecap="round" />
+              <g :class="{ flash: redline }">
+                <path
+                  v-for="(bar, i) in arcBars"
+                  :key="i"
+                  :d="bar.d"
+                  fill="none"
+                  :stroke="bar.color"
+                  stroke-width="7"
+                  stroke-linecap="round"
+                  :style="{ opacity: i < litBars ? 1 : 0 }"
+                />
+              </g>
+            </g>
+            <!-- 侧舱圆环：左轮胎 / 右 G 力 -->
+            <g style="filter: drop-shadow(0 0 3px rgba(120, 140, 170, 0.3))">
+              <template v-if="config.show_tires">
+                <circle cx="58" cy="104" r="38" fill="#11161e" :opacity="panelOpacity" />
+                <circle cx="58" cy="104" r="38" fill="none" stroke="#2a323d" stroke-width="2.5" />
+              </template>
+              <template v-if="config.show_gforce">
+                <circle cx="602" cy="104" r="38" fill="#11161e" :opacity="panelOpacity" />
+                <circle cx="602" cy="104" r="38" fill="none" stroke="#2a323d" stroke-width="2.5" />
+              </template>
+            </g>
+          </svg>
+
+          <!-- 换挡灯 -->
+          <div class="ov rev" :class="{ flash: redline }" style="left: 261px; top: 54px">
             <div
-              v-for="i in SEG"
+              v-for="(c, i) in ledColors"
               :key="i"
-              class="shift-led"
-              :class="{ lit: i <= litSegments, flash: nearRedline }"
-              :style="{ background: i <= litSegments ? segColor(i - 1) : '#1a1a1a' }"
+              class="led"
+              :style="{
+                background: i < litLeds ? c : '#1c2128',
+                boxShadow: i < litLeds ? `0 0 5px ${c}` : 'none',
+              }"
             ></div>
           </div>
 
-          <!-- 主面板 -->
-          <div class="main-panel">
-            <!-- 左侧面板：轮胎信息 -->
-            <div v-if="config.show_tires" class="side-panel tires">
-              <div class="panel-title">TIRES</div>
-              <div class="tire-grid-compact">
-                <div v-for="tire in tires" :key="tire.i" class="tire-compact">
-                  <div class="tire-label-compact">{{ tire.label }}</div>
-                  <div class="tire-bar-compact" :style="{ background: gripColor(slips[tire.i]) }"
-                    :class="{ slip: slipping(slips[tire.i]) }"></div>
-                  <div class="tire-temp-compact" :style="{ background: tempColor(temps[tire.i]) }">
-                    {{ temps[tire.i] }}°
-                  </div>
-                </div>
-              </div>
-            </div>
+          <!-- 转速数字 -->
+          <div class="ov rpm-box" :class="{ redline }" style="left: 190px; top: 84px; transform: translateX(-50%)">
+            <div class="lbl">RPM</div>
+            <div class="v">{{ Math.round(t.rpm) }}</div>
+          </div>
 
-            <!-- 油门 -->
-            <div v-if="config.show_inputs" class="input-side">
-              <div class="input-label">THR</div>
-              <div class="input-bar-v">
-                <div class="input-fill-v thr" :style="{ height: Math.round((t.accel / 255) * 100) + '%' }"></div>
-              </div>
-              <div class="input-value">{{ Math.round((t.accel / 255) * 100) }}</div>
-            </div>
+          <!-- 档位 -->
+          <div class="ov gear" :class="{ redline }" style="left: 290px; top: 66px">{{ gearLabel(t.gear) }}</div>
 
-            <!-- 中央：速度 + 档位 + 转速 + 转向 -->
-            <div class="center-panel">
-              <div class="speed-block">
-                <div class="speed-value">{{ String(speedDisplay).padStart(3, '0') }}</div>
-                <div class="speed-label">{{ speedUnit }}</div>
-              </div>
-              <div class="gear-display" :class="{ redline: nearRedline }">
-                {{ gearLabel(t.gear) }}
-              </div>
-              <div class="rpm-display" :class="{ redline: nearRedline }">
-                <span class="rpm-label">RPM</span>
-                <span class="rpm-value">{{ Math.round(t.rpm) }}</span>
-              </div>
-              <!-- 转向条 -->
-              <div v-if="config.show_inputs" class="steer-bar">
-                <div class="steer-indicator" :style="{ left: `calc(50% + ${steerAngle / 9}%)` }"></div>
-              </div>
-            </div>
+          <!-- 油门 / 刹车 -->
+          <div v-if="config.show_inputs" class="ov inputs" style="left: 261px; top: 143px">
+            <div class="itrack brk"><div class="ifill brk" :style="{ width: brake + '%' }"></div></div>
+            <div class="itrack"><div class="ifill thr" :style="{ width: throttle + '%' }"></div></div>
+          </div>
 
-            <!-- 刹车 -->
-            <div v-if="config.show_inputs" class="input-side">
-              <div class="input-label">BRK</div>
-              <div class="input-bar-v">
-                <div class="input-fill-v brk" :style="{ height: Math.round((t.brake / 255) * 100) + '%' }"></div>
-              </div>
-              <div class="input-value">{{ Math.round((t.brake / 255) * 100) }}</div>
-            </div>
+          <!-- 速度 + 转向 -->
+          <div class="ov spd-box" style="left: 470px; top: 76px; transform: translateX(-50%)">
+            <div class="lbl">{{ speedUnit }}</div>
+            <div class="v">{{ speedDisplay }}</div>
+            <template v-if="config.show_inputs">
+              <div class="steer-track"><div class="steer-ind" :style="{ left: `calc(50% + ${steerOffset}%)` }"></div></div>
+              <div class="steer-lbl">STEER</div>
+            </template>
+          </div>
 
-            <!-- 右侧面板：G力 -->
-            <div v-if="config.show_gforce" class="side-panel gforce">
-              <div class="panel-title">G-FORCE</div>
-              <div class="g-circle-compact">
-                <svg viewBox="0 0 100 100" class="g-grid">
-                  <circle cx="50" cy="50" r="45" fill="none" stroke="#333" stroke-width="1"/>
-                  <circle cx="50" cy="50" r="30" fill="none" stroke="#222" stroke-width="1"/>
-                  <line x1="5" y1="50" x2="95" y2="50" stroke="#222" stroke-width="1"/>
-                  <line x1="50" y1="5" x2="50" y2="95" stroke="#222" stroke-width="1"/>
-                </svg>
-                <div class="g-dot-compact" :style="{ left: dotX + '%', top: dotY + '%' }"></div>
-              </div>
-              <div class="g-values-compact">
-                <div class="g-row-compact"><span>TOTAL G</span><span>{{ gTotal }}</span></div>
-              </div>
+          <!-- 左舱：轮胎 -->
+          <div
+            v-if="config.show_tires"
+            class="ov tires"
+            style="left: 58px; top: 104px; transform: translate(-50%, -50%)"
+          >
+            <div
+              v-for="i in 4"
+              :key="i"
+              class="tt"
+              :style="{ background: gripColor(slips[i - 1]) }"
+            >
+              {{ temps[i - 1] }}
             </div>
+          </div>
+
+          <!-- 右舱：G 力 -->
+          <div
+            v-if="config.show_gforce"
+            class="ov gpod"
+            style="left: 602px; top: 104px; transform: translate(-50%, -50%)"
+          >
+            <div class="gbox">
+              <div class="ln v"></div>
+              <div class="ln h"></div>
+              <div class="gdot" :style="{ left: dotX + '%', top: dotY + '%' }"></div>
+            </div>
+            <div class="gval">{{ gTotal }} G</div>
           </div>
         </template>
 
@@ -217,322 +261,255 @@ const steerAngle = computed(() => (t.value ? (t.value.steer / 127) * 450 : 0));
 </template>
 
 <style scoped>
-.content {
-  padding: 10px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.win {
+  width: 100%;
+  height: 100%;
+  font-family: "Rajdhani", "Consolas", -apple-system, sans-serif;
+  color: #fff;
+  user-select: none;
 }
-.editing .content {
+.editing .wrap {
   cursor: move;
 }
 
-/* 换挡灯条 */
-.shift-bar {
-  display: flex;
-  gap: 3px;
-  height: 20px;
-  padding: 0 14px;
-}
-.shift-led {
-  flex: 1;
-  background: #1a1a1a;
-  transition: background 0.05s ease;
-  border: 1px solid #0a0a0a;
-}
-.shift-led.lit {
-  box-shadow: 0 0 8px currentColor;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-}
-.shift-led.flash {
-  animation: led-flash 0.1s steps(2) infinite;
-}
-@keyframes led-flash {
-  50% { opacity: 0.2; }
-}
-
-/* 主面板 */
-.main-panel {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex: 1;
-}
-
-/* 油门/刹车竖条 */
-.input-side {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 40px;
-  background: #0a0a0a;
-  padding: 8px 6px;
-}
-
-.input-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: #666;
-}
-
-.input-bar-v {
-  width: 100%;
-  height: 120px;
-  background: #0a0a0a;
+.wrap {
   position: relative;
-  display: flex;
-  align-items: flex-end;
+  width: 660px;
+  height: 204px;
 }
-
-.input-fill-v {
-  width: 100%;
-  transition: height 0.05s linear;
-}
-
-.input-fill-v.thr {
-  background: #00ff00;
-}
-
-.input-fill-v.brk {
-  background: #ff0000;
-}
-
-.input-value {
-  font-size: 11px;
-  font-weight: 900;
-  font-family: "Consolas", monospace;
-  color: #ffffff;
-}
-
-.side-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: #0a0a0a;
-  padding: 8px;
-  width: 140px;
-  height: 140px;
-}
-
-.panel-title {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: #666;
-  text-align: center;
-}
-
-/* 轮胎紧凑视图 */
-.tire-grid-compact {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  flex: 1;
-}
-
-.tire-compact {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.tire-label-compact {
-  font-size: 8px;
-  font-weight: 700;
-  color: #666;
-}
-
-.tire-bar-compact {
-  width: 100%;
-  height: 10px;
-}
-
-.tire-bar-compact.slip {
-  animation: slip-flash 0.15s steps(2) infinite;
-}
-
-@keyframes slip-flash {
-  50% { opacity: 0.3; }
-}
-
-.tire-temp-compact {
-  width: 100%;
-  padding: 2px;
-  text-align: center;
-  font-size: 10px;
-  font-weight: 700;
-  color: #000;
-}
-
-/* 中央速度+档位 */
-.center-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.speed-block {
-  background: #0a0a0a;
-  padding: 8px 16px;
-  text-align: center;
-}
-
-.speed-value {
-  font-size: 48px;
-  font-weight: 900;
-  line-height: 1;
-  font-family: "Consolas", monospace;
-  color: #ffffff;
-  letter-spacing: 2px;
-}
-
-.speed-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: #888;
-  margin-top: 2px;
-}
-
-.gear-display {
-  font-size: 64px;
-  font-weight: 900;
-  line-height: 0.9;
-  font-family: "Consolas", monospace;
-  color: #ffffff;
-}
-
-.gear-display.redline {
-  color: #ff0000;
-  animation: gear-pulse 0.2s ease-in-out infinite;
-}
-
-@keyframes gear-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.08); }
-}
-
-.rpm-display {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  background: #0a0a0a;
-  padding: 4px 16px;
-}
-
-.rpm-display.redline .rpm-value {
-  color: #ff0000;
-  animation: rpm-pulse 0.2s ease-in-out infinite;
-}
-
-@keyframes rpm-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-}
-
-.rpm-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: #888;
-}
-
-.rpm-value {
-  font-size: 18px;
-  font-weight: 900;
-  font-family: "Consolas", monospace;
-  color: #ffffff;
-  letter-spacing: 1px;
-}
-
-/* 转向条 */
-.steer-bar {
-  width: 180px;
-  height: 8px;
-  background: #0a0a0a;
-  position: relative;
-  margin-top: 4px;
-}
-
-.steer-indicator {
+.layer {
   position: absolute;
-  top: 0;
-  width: 4px;
+  inset: 0;
+  width: 100%;
   height: 100%;
-  background: #ffffff;
+}
+.ov {
+  position: absolute;
+}
+
+/* 红线闪烁 */
+.flash {
+  animation: hud-flash 0.1s steps(2) infinite;
+}
+@keyframes hud-flash {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+/* 换挡灯 */
+.rev {
+  display: flex;
+  gap: 5px;
+}
+.led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1c2128;
+  transition: background 0.05s, box-shadow 0.05s;
+}
+
+/* 转速数字 */
+.rpm-box {
+  text-align: center;
+}
+.rpm-box .lbl,
+.spd-box .lbl {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: #7d8794;
+}
+.rpm-box .v {
+  font-size: 30px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  transition: color 0.1s;
+}
+.rpm-box.redline .v {
+  color: #ff3b30;
+}
+
+/* 档位 */
+.gear {
+  width: 80px;
+  text-align: center;
+  font-size: 76px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  transition: color 0.1s;
+}
+.gear.redline {
+  color: #ff3b30;
+}
+
+/* 速度 */
+.spd-box {
+  text-align: center;
+}
+.spd-box .v {
+  font-size: 34px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.steer-track {
+  margin: 7px auto 0;
+  width: 74px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  position: relative;
+}
+.steer-ind {
+  position: absolute;
+  top: -1px;
+  width: 5px;
+  height: 7px;
+  background: #19e0ff;
+  border-radius: 2px;
   transform: translateX(-50%);
   transition: left 0.06s linear;
 }
-
-/* G力紧凑视图 */
-.g-circle-compact {
-  position: relative;
-  width: 100px;
-  height: 100px;
-  background: #0a0a0a;
-  border-radius: 50%;
-  margin: 0 auto;
-  flex-shrink: 0;
+.steer-lbl {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: #5f6b7a;
+  margin-top: 3px;
 }
 
-.g-grid {
-  width: 100%;
-  height: 100%;
-}
-
-.g-dot-compact {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ff0000;
-  transform: translate(-50%, -50%);
-  transition: all 0.05s linear;
-  border: 2px solid #fff;
-}
-
-.g-values-compact {
+/* 油门 / 刹车 */
+.inputs {
   display: flex;
-  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  width: 138px;
+}
+.itrack {
+  width: 66px;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+}
+.itrack.brk {
+  justify-content: flex-end;
+}
+.ifill {
+  height: 100%;
+  transition: width 0.05s linear;
+}
+.ifill.thr {
+  background: #00e676;
+}
+.ifill.brk {
+  background: #ff3b30;
+}
+
+/* 轮胎 */
+.tires {
+  display: grid;
+  grid-template-columns: 17px 17px;
   gap: 3px;
 }
-
-.g-row-compact {
-  display: flex;
-  justify-content: space-between;
+.tt {
   font-size: 11px;
   font-weight: 700;
-  color: #fff;
-  padding: 2px 4px;
-  background: #0a0a0a;
+  color: #06140d;
+  text-align: center;
+  border-radius: 3px;
+  padding: 2px 0;
+  background: #34e39a;
+}
+
+/* G 力 */
+.gpod {
+  width: 76px;
+  height: 76px;
+  text-align: center;
+}
+.gbox {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+}
+.gbox .ln {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.1);
+}
+.gbox .ln.v {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.gbox .ln.h {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.gdot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #19e0ff;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px #19e0ff;
+  transition: all 0.05s linear;
+}
+.gval {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 58px;
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 600;
+  color: #8a93a0;
 }
 
 /* 等待状态 */
 .waiting {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
   gap: 6px;
 }
-
 .waiting-text {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 1px;
-  color: #888;
+  color: #8a929d;
 }
-
 .waiting-port {
   font-size: 11px;
   font-weight: 700;
-  color: #555;
+  color: #5f6b7a;
+}
+
+/* 缩放手柄 */
+.resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.4) 50%);
 }
 </style>

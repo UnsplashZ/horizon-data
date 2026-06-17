@@ -1,3 +1,27 @@
+@font-face {
+  font-family: "Rajdhani";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/Rajdhani-500.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Rajdhani";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/Rajdhani-600.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Rajdhani";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/Rajdhani-700.ttf") format("truetype");
+}
+
 /* 覆盖窗口：背景必须透明，否则会盖住游戏 */
 html,
 body,
@@ -18,21 +42,21 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 真实 F1 风格窗口 - 纯黑背景，无边框 */
+/* 覆盖窗口：背景全透明，仪表盘自身的异形面板才半透明 */
 .win {
   position: fixed;
   inset: 0;
   overflow: hidden;
   border-radius: 0;
   box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.95);
+  background: transparent;
   border: none;
 }
 
 .win.editing {
   cursor: grab;
-  border: 1px solid #00ff00;
-  box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+  /* 用 inset 阴影描边，不占布局盒模型，避免切换编辑/锁定时 HUD 位移 */
+  box-shadow: inset 0 0 0 1px #00ff00, 0 0 20px rgba(0, 255, 0, 0.3);
 }
 
 .win.editing:active {

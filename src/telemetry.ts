@@ -35,8 +35,8 @@ export const config = reactive<Config>({
   fg_opacity: 1.0,
   units: "kmh",
   show_tires: true,
-  show_inputs: false,
-  show_gforce: false,
+  show_inputs: true,
+  show_gforce: true,
   pos_main: [-1, -1],
   size_main: [0, 0],
 });
