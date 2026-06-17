@@ -30,22 +30,22 @@
         "visible": true
       },
       {
-        "label": "settings",
-        "url": "index.html?view=settings",
-        "title": "horizon-data settings",
-        "width": 290,
-        "height": 510,
-        "minWidth": 250,
-        "minHeight": 400,
-        "maxHeight": 800,
+        "label": "controls",
+        "url": "index.html?view=controls",
+        "title": "horizon-data controls",
+        "width": 320,
+        "height": 356,
+        "minWidth": 300,
+        "minHeight": 330,
+        "maxWidth": 420,
+        "maxHeight": 460,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "shadow": false,
-        "resizable": true,
-        "visible": false,
-        "center": true
+        "resizable": false,
+        "visible": false
       }
     ],
     "security": {

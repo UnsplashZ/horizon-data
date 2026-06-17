@@ -5,13 +5,7 @@ const view = new URLSearchParams(location.search).get("view") ?? "main";
 
 const loaders: Record<string, () => Promise<{ default: Component }>> = {
   main: () => import("./views/HudMain.vue"),
-  inputs: () => import("./views/Inputs.vue"),
-  tireinfo: () => import("./views/TireInfo.vue"),
-  gforce: () => import("./views/Gforce.vue"),
-  // 保留旧视图以兼容
-  grip: () => import("./views/Grip.vue"),
-  tiretemp: () => import("./views/TireTemp.vue"),
-  settings: () => import("./views/Settings.vue"),
+  controls: () => import("./views/TrayControls.vue"),
 };
 
 (loaders[view] ?? loaders.main)().then((m) => createApp(m.default).mount("#app"));

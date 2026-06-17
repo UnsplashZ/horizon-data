@@ -1,24 +1,26 @@
-// FH6 透明覆盖层后端（多窗口）：
-// - 主表 + 输入/抓地/G力/胎温 各自独立透明置顶窗口，可分别拖动定位、拖角缩放
+// FH6 透明覆盖层后端：
+// - 主 HUD 窗口 + 状态栏/托盘控制入口
 // - 监听 UDP Data Out，解析 324B，广播 "telemetry"（端口热重绑）
-// - 全局快捷键 Cmd/Ctrl+Shift+H 切换 编辑/锁定（锁定=全部点击穿透），编辑态显示设置窗
-// - 配置存 exe 同目录 config.json（便携/绿色版友好）
+// - 全局快捷键 Cmd/Ctrl+Shift+H 仅切换 HUD 编辑/锁定，用于调整位置和尺寸
+// - 配置优先存 exe 同目录，安装目录不可写时落到用户配置目录
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
+use std::fs::OpenOptions;
 use std::io::ErrorKind;
 use std::net::UdpSocket;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, State};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager, PhysicalPosition, PhysicalRect, PhysicalSize, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const PACKET_SIZE: usize = 324;
 static EDITING: AtomicBool = AtomicBool::new(false);
 const OVERLAY_WINDOWS: [&str; 1] = ["main"];
-const MODULES: [&str; 5] = ["inputs", "tireinfo", "gforce", "grip", "tiretemp"];
 
 #[derive(Serialize, Clone)]
 struct Telemetry {
@@ -43,9 +45,9 @@ struct Config {
     bg_opacity: f32,
     fg_opacity: f32,
     units: String,
-    show_tires: bool,   // 统一仪表盘中的轮胎模块
-    show_inputs: bool,  // 统一仪表盘中的输入模块
-    show_gforce: bool,  // 统一仪表盘中的G力模块
+    show_tires: bool,  // 统一仪表盘中的轮胎模块
+    show_inputs: bool, // 统一仪表盘中的输入模块
+    show_gforce: bool, // 统一仪表盘中的G力模块
     pos_main: [i32; 2],
     size_main: [u32; 2],
 }
@@ -71,21 +73,105 @@ struct AppState {
 }
 
 fn config_path() -> PathBuf {
-    let dir = std::env::current_exe()
-        .ok()
-        .and_then(|e| e.parent().map(|d| d.to_path_buf()))
-        .unwrap_or_else(|| PathBuf::from("."));
-    dir.join("horizon-data-config.json")
+    let portable = portable_config_path();
+
+    if let Some(path) = &portable {
+        if (path.exists() && is_writable_file(path))
+            || (!path.exists() && path.parent().is_some_and(is_writable_dir))
+        {
+            return path.clone();
+        }
+    }
+
+    user_config_dir().join("horizon-data-config.json")
 }
+
+fn portable_config_path() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|d| d.join("horizon-data-config.json")))
+}
+
+fn user_config_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return PathBuf::from(appdata).join("horizon-data");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home)
+                .join("Library")
+                .join("Application Support")
+                .join("horizon-data");
+        }
+    }
+
+    if let Some(config_home) = std::env::var_os("XDG_CONFIG_HOME") {
+        return PathBuf::from(config_home).join("horizon-data");
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        return PathBuf::from(home).join(".config").join("horizon-data");
+    }
+    PathBuf::from(".").join("horizon-data")
+}
+
+fn is_writable_dir(dir: &Path) -> bool {
+    let probe = dir.join(".horizon-data-write-test");
+    match std::fs::write(&probe, b"") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+fn is_writable_file(path: &Path) -> bool {
+    OpenOptions::new().append(true).open(path).is_ok()
+}
+
 fn load_config_file() -> Config {
-    std::fs::read_to_string(config_path())
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    let writable = config_path();
+    let mut candidates = vec![writable.clone()];
+    if let Some(portable) = portable_config_path() {
+        if portable != writable {
+            candidates.push(portable);
+        }
+    }
+
+    for path in candidates {
+        if let Some(config) = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+        {
+            return normalize_config(config);
+        }
+    }
+
+    Config::default()
 }
+
+fn normalize_config(mut c: Config) -> Config {
+    c.port = c.port.max(1);
+    c.bg_opacity = clamp01(c.bg_opacity);
+    c.fg_opacity = clamp01(c.fg_opacity);
+    if c.units != "mph" {
+        c.units = "kmh".into();
+    }
+    c
+}
+
 fn save_config_file(c: &Config) -> Result<(), String> {
+    let path = config_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     let s = serde_json::to_string_pretty(c).map_err(|e| e.to_string())?;
-    std::fs::write(config_path(), s).map_err(|e| e.to_string())
+    std::fs::write(path, s).map_err(|e| e.to_string())
 }
 
 fn pos_of<'a>(c: &'a mut Config, label: &str) -> Option<&'a mut [i32; 2]> {
@@ -100,9 +186,6 @@ fn size_of<'a>(c: &'a mut Config, label: &str) -> Option<&'a mut [u32; 2]> {
         _ => None,
     }
 }
-fn module_shown(_c: &Config, label: &str) -> bool {
-    label == "main"
-}
 
 #[tauri::command]
 fn get_config(state: State<AppState>) -> Config {
@@ -110,27 +193,23 @@ fn get_config(state: State<AppState>) -> Config {
 }
 
 #[tauri::command]
-fn update_config(app: tauri::AppHandle, state: State<AppState>, config: Config) -> Result<(), String> {
-    // 位置/尺寸只由拖动写入，设置面板更新不得覆盖
+fn update_config(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    config: Config,
+) -> Result<(), String> {
     let merged = {
         let mut c = state.config.lock().unwrap();
         let pos_main = c.pos_main;
         let size_main = c.size_main;
-        *c = config;
+        *c = normalize_config(config);
         c.pos_main = pos_main;
         c.size_main = size_main;
+        save_config_file(&c)?;
         c.clone()
     };
-    save_config_file(&merged)?;
     state.desired_port.store(merged.port, Ordering::Relaxed);
-    apply_module_visibility(&app, &merged);
     let _ = app.emit("config", &merged);
-    // 显示新窗口会抢焦点：编辑态下把焦点交回设置窗，方便连续勾选
-    if EDITING.load(Ordering::Relaxed) {
-        if let Some(s) = app.get_webview_window("settings") {
-            let _ = s.set_focus();
-        }
-    }
     Ok(())
 }
 
@@ -141,9 +220,11 @@ fn save_window_pos(app: tauri::AppHandle, state: State<AppState>, label: String,
         if let Some(p) = pos_of(&mut c, &label) {
             *p = [x, y];
         }
+        if let Err(e) = save_config_file(&c) {
+            eprintln!("[config] 保存窗口位置失败: {e}");
+        }
         c.clone()
     };
-    let _ = save_config_file(&merged);
     let _ = app.emit("config", &merged);
 }
 
@@ -154,15 +235,12 @@ fn save_window_size(app: tauri::AppHandle, state: State<AppState>, label: String
         if let Some(s) = size_of(&mut c, &label) {
             *s = [w, h];
         }
+        if let Err(e) = save_config_file(&c) {
+            eprintln!("[config] 保存窗口尺寸失败: {e}");
+        }
         c.clone()
     };
-    let _ = save_config_file(&merged);
     let _ = app.emit("config", &merged);
-}
-
-#[tauri::command]
-fn quit_app(app: tauri::AppHandle) {
-    app.exit(0);
 }
 
 #[inline]
@@ -180,25 +258,23 @@ fn parse(b: &[u8]) -> Telemetry {
         rpm: read_f32(b, 16),
         accel_x: read_f32(b, 20),
         accel_z: read_f32(b, 28),
-        tire_slip: [read_f32(b, 180), read_f32(b, 184), read_f32(b, 188), read_f32(b, 192)],
-        tire_temp: [read_f32(b, 268), read_f32(b, 272), read_f32(b, 276), read_f32(b, 280)],
+        tire_slip: [
+            read_f32(b, 180),
+            read_f32(b, 184),
+            read_f32(b, 188),
+            read_f32(b, 192),
+        ],
+        tire_temp: [
+            read_f32(b, 268),
+            read_f32(b, 272),
+            read_f32(b, 276),
+            read_f32(b, 280),
+        ],
         speed_kmh: read_f32(b, 256) * 3.6,
         accel: b[315],
         brake: b[316],
         gear: b[319],
         steer: b[320] as i8,
-    }
-}
-
-fn apply_module_visibility(app: &tauri::AppHandle, c: &Config) {
-    for label in MODULES {
-        if let Some(w) = app.get_webview_window(label) {
-            if module_shown(c, label) {
-                let _ = w.show();
-            } else {
-                let _ = w.hide();
-            }
-        }
     }
 }
 
@@ -232,23 +308,203 @@ fn place_window(app: &tauri::AppHandle, c: &mut Config, label: &str, dx: f64, dy
     }
 }
 
-fn toggle_edit(app: &tauri::AppHandle) {
-    let editing = !EDITING.load(Ordering::Relaxed);
+fn apply_edit_mode(app: &tauri::AppHandle, editing: bool) {
     EDITING.store(editing, Ordering::Relaxed);
     for label in OVERLAY_WINDOWS {
         if let Some(w) = app.get_webview_window(label) {
             let _ = w.set_ignore_cursor_events(!editing);
         }
     }
-    if let Some(s) = app.get_webview_window("settings") {
-        if editing {
-            let _ = s.show();
-            let _ = s.set_focus();
-        } else {
-            let _ = s.hide();
+    let _ = app.emit("edit-mode", editing);
+}
+
+fn show_controls(app: &tauri::AppHandle, pos: Option<PhysicalPosition<f64>>) {
+    if let Some(w) = app.get_webview_window("controls") {
+        let next_pos = pos
+            .and_then(|p| controls_position_for_click(&w, p))
+            .or_else(|| default_controls_position(app, &w));
+        if let Some(p) = next_pos {
+            let _ = w.set_position(p);
+        }
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+fn controls_window_size(w: &tauri::WebviewWindow) -> PhysicalSize<u32> {
+    w.outer_size().unwrap_or(PhysicalSize::new(320, 356))
+}
+
+fn controls_position_for_click(
+    w: &tauri::WebviewWindow,
+    click: PhysicalPosition<f64>,
+) -> Option<PhysicalPosition<i32>> {
+    let area = work_area_for_point(w, click).or_else(|| {
+        w.current_monitor()
+            .ok()
+            .flatten()
+            .map(|monitor| *monitor.work_area())
+    })?;
+    let size = controls_window_size(w);
+    Some(place_controls_near_click(area, size, click))
+}
+
+fn default_controls_position(
+    app: &tauri::AppHandle,
+    w: &tauri::WebviewWindow,
+) -> Option<PhysicalPosition<i32>> {
+    let area = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|monitor| *monitor.work_area())
+        .or_else(|| {
+            w.current_monitor()
+                .ok()
+                .flatten()
+                .map(|monitor| *monitor.work_area())
+        })?;
+    let size = controls_window_size(w);
+    let margin = 12;
+    let x = area.position.x + area.size.width as i32 - size.width as i32 - margin;
+    let y = area.position.y + margin;
+    Some(PhysicalPosition::new(
+        clamp_i32(
+            x,
+            area.position.x + margin,
+            area.position.x + area.size.width as i32 - size.width as i32 - margin,
+        ),
+        clamp_i32(
+            y,
+            area.position.y + margin,
+            area.position.y + area.size.height as i32 - size.height as i32 - margin,
+        ),
+    ))
+}
+
+fn work_area_for_point(
+    w: &tauri::WebviewWindow,
+    point: PhysicalPosition<f64>,
+) -> Option<PhysicalRect<i32, u32>> {
+    for monitor in w.available_monitors().ok()? {
+        let area = *monitor.work_area();
+        let left = area.position.x as f64;
+        let top = area.position.y as f64;
+        let right = left + area.size.width as f64;
+        let bottom = top + area.size.height as f64;
+        if point.x >= left && point.x <= right && point.y >= top && point.y <= bottom {
+            return Some(area);
         }
     }
-    let _ = app.emit("edit-mode", editing);
+    None
+}
+
+fn place_controls_near_click(
+    area: PhysicalRect<i32, u32>,
+    size: PhysicalSize<u32>,
+    click: PhysicalPosition<f64>,
+) -> PhysicalPosition<i32> {
+    let margin = 8;
+    let width = size.width as i32;
+    let height = size.height as i32;
+    let left = area.position.x + margin;
+    let top = area.position.y + margin;
+    let right = area.position.x + area.size.width as i32 - width - margin;
+    let bottom = area.position.y + area.size.height as i32 - height - margin;
+    let click_x = click.x.round() as i32;
+    let click_y = click.y.round() as i32;
+    let below = click_y + margin;
+    let above = click_y - height - margin;
+    let preferred_y = if below + height <= area.position.y + area.size.height as i32 {
+        below
+    } else {
+        above
+    };
+
+    PhysicalPosition::new(
+        clamp_i32(click_x - width + margin, left, right),
+        clamp_i32(preferred_y, top, bottom),
+    )
+}
+
+fn clamp_i32(value: i32, min: i32, max: i32) -> i32 {
+    if max < min {
+        min
+    } else {
+        value.max(min).min(max)
+    }
+}
+
+fn hide_controls(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("controls") {
+        let _ = w.hide();
+    }
+}
+
+fn toggle_controls(app: &tauri::AppHandle, pos: Option<PhysicalPosition<f64>>) {
+    if let Some(w) = app.get_webview_window("controls") {
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+        } else {
+            show_controls(app, pos);
+        }
+    }
+}
+
+fn toggle_edit(app: &tauri::AppHandle) {
+    let editing = !EDITING.load(Ordering::Relaxed);
+    apply_edit_mode(app, editing);
+}
+
+fn clamp01(v: f32) -> f32 {
+    v.max(0.0).min(1.0)
+}
+
+fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let open_controls =
+        MenuItem::with_id(app, "open_controls", "打开控制面板", true, None::<&str>)?;
+    let edit_layout = MenuItem::with_id(app, "edit_layout", "编辑 HUD 布局", true, None::<&str>)?;
+    let lock_hud = MenuItem::with_id(app, "lock_hud", "锁定 HUD", true, None::<&str>)?;
+    let sep = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open_controls, &edit_layout, &lock_hud, &sep, &quit])?;
+
+    let mut tray = TrayIconBuilder::with_id("horizon-data")
+        .menu(&menu)
+        .tooltip("horizon-data")
+        .show_menu_on_left_click(false)
+        .on_menu_event(move |app, event| {
+            let id = event.id();
+            if id == "open_controls" {
+                show_controls(app, None);
+            } else if id == "edit_layout" {
+                apply_edit_mode(app, true);
+                show_controls(app, None);
+            } else if id == "lock_hud" {
+                apply_edit_mode(app, false);
+                hide_controls(app);
+            } else if id == "quit" {
+                app.exit(0);
+            }
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                position,
+                ..
+            } = event
+            {
+                toggle_controls(tray.app_handle(), Some(position));
+            }
+        });
+
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray = tray.icon(icon);
+    }
+
+    tray.build(app)?;
+    Ok(())
 }
 
 fn spawn_udp_listener(app: tauri::AppHandle, desired: Arc<AtomicU16>) {
@@ -280,7 +536,8 @@ fn spawn_udp_listener(app: tauri::AppHandle, desired: Arc<AtomicU16>) {
                     }
                     Ok(_) => {}
                     Err(ref e)
-                        if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {}
+                        if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {
+                    }
                     Err(e) => eprintln!("[udp] recv 错误: {e}"),
                 }
             }
@@ -304,31 +561,25 @@ fn main() {
             update_config,
             save_window_pos,
             save_window_size,
+            set_edit_mode,
             quit_app
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
 
             // 默认布局：
-            // - 主仪表在屏幕底部中心
-            // - 输入在主仪表左侧
-            // - G力在主仪表右侧
-            // - 轮胎信息在屏幕左侧
+            // - 主 HUD 在屏幕底部中心
+            // - 设置全部由状态栏/托盘菜单承接
             place_window(&handle, &mut cfg, "main", 0.0, -200.0);
-            place_window(&handle, &mut cfg, "inputs", -280.0, -200.0);
-            place_window(&handle, &mut cfg, "gforce", 280.0, -200.0);
-            place_window(&handle, &mut cfg, "tireinfo", -600.0, -120.0);
-            place_window(&handle, &mut cfg, "grip", -150.0, 300.0);
-            place_window(&handle, &mut cfg, "tiretemp", 450.0, 300.0);
 
             for label in OVERLAY_WINDOWS {
                 if let Some(w) = app.get_webview_window(label) {
                     let _ = w.set_ignore_cursor_events(true);
-                    if module_shown(&cfg, label) {
-                        let _ = w.show();
-                    }
+                    let _ = w.show();
                 }
             }
+
+            build_tray(&handle)?;
 
             app.global_shortcut()
                 .on_shortcut("CmdOrCtrl+Shift+H", |app, _shortcut, event| {
@@ -342,4 +593,13 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("运行 Tauri 应用出错");
+}
+#[tauri::command]
+fn set_edit_mode(app: tauri::AppHandle, editing: bool) {
+    apply_edit_mode(&app, editing);
+}
+
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
 }

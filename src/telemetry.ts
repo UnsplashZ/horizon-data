@@ -77,7 +77,29 @@ export async function updateConfig() {
   const inv = await tauri();
   if (inv) {
     try {
-      await inv("update_config", { config: { ...config } });
+      await inv("update_config", { config: normalizedConfig() });
+    } catch {}
+  }
+}
+
+function normalizedConfig(): Config {
+  const port = Math.round(Number(config.port));
+  const bgOpacity = Number(config.bg_opacity);
+  const fgOpacity = Number(config.fg_opacity);
+  return {
+    ...config,
+    port: Number.isFinite(port) ? Math.min(65535, Math.max(1, port)) : 5300,
+    bg_opacity: Number.isFinite(bgOpacity) ? Math.min(1, Math.max(0, bgOpacity)) : 0.72,
+    fg_opacity: Number.isFinite(fgOpacity) ? Math.min(1, Math.max(0, fgOpacity)) : 1,
+    units: config.units === "mph" ? "mph" : "kmh",
+  };
+}
+
+export async function setEditMode(value: boolean) {
+  const inv = await tauri();
+  if (inv) {
+    try {
+      await inv("set_edit_mode", { editing: value });
     } catch {}
   }
 }
