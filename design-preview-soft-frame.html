@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Horizon Data HUD - Soft Frame Design Preview</title>
+<style>
+  @font-face {
+    font-family: "Rajdhani";
+    font-style: normal;
+    font-weight: 500;
+    src: url("./src/assets/fonts/Rajdhani-500.ttf") format("truetype");
+  }
+  @font-face {
+    font-family: "Rajdhani";
+    font-style: normal;
+    font-weight: 600;
+    src: url("./src/assets/fonts/Rajdhani-600.ttf") format("truetype");
+  }
+  @font-face {
+    font-family: "Rajdhani";
+    font-style: normal;
+    font-weight: 700;
+    src: url("./src/assets/fonts/Rajdhani-700.ttf") format("truetype");
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Rajdhani", -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #f4f7fb;
+    background:
+      radial-gradient(circle at 30% 18%, rgba(85, 110, 132, .60) 0, transparent 34%),
+      linear-gradient(180deg, #18202a 0, #0f141b 100%);
+  }
+  main {
+    width: min(1180px, calc(100vw - 48px));
+    margin: 0 auto;
+    padding: 42px 0 48px;
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+  .sub {
+    margin: 0 0 28px;
+    color: #9aa7b6;
+    font-size: 14px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  .case {
+    min-width: 0;
+  }
+  .case-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #d9e2ec;
+  }
+  .tag {
+    font-size: 12px;
+    color: #7f8da0;
+  }
+  .stage {
+    min-height: 258px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(255,255,255,.08);
+    background:
+      url("./design-assets/forza-road-tail-bg.png") center 46% / cover,
+      rgba(8, 12, 17, .28);
+  }
+  .stage::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(4, 7, 10, .48), transparent 32%, transparent 68%, rgba(4, 7, 10, .46));
+    pointer-events: none;
+  }
+  .wrap {
+    position: relative;
+    width: 660px;
+    height: 204px;
+    user-select: none;
+    z-index: 1;
+  }
+  svg.layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .ov { position: absolute; }
+  .rev { display: flex; gap: 5px; }
+  .led {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #1c2128;
+  }
+  .rpm-box,
+  .spd-box { text-align: center; }
+  .rpm-box .lbl,
+  .spd-box .lbl {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: #7d8794;
+  }
+  .rpm-box .v {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .gear {
+    width: 80px;
+    text-align: center;
+    font-size: 76px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .spd-box .v {
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .steer-track {
+    margin: 7px auto 0;
+    width: 74px;
+    height: 5px;
+    background: rgba(255,255,255,.1);
+    border-radius: 3px;
+    position: relative;
+  }
+  .steer-ind {
+    position: absolute;
+    left: calc(50% + 18%);
+    top: -1px;
+    width: 5px;
+    height: 7px;
+    background: #19e0ff;
+    border-radius: 2px;
+    transform: translateX(-50%);
+  }
+  .steer-lbl {
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: #5f6b7a;
+    margin-top: 3px;
+  }
+  .inputs {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    width: 138px;
+  }
+  .itrack {
+    width: 66px;
+    height: 7px;
+    background: rgba(255,255,255,.1);
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+  }
+  .itrack.brk { justify-content: flex-end; }
+  .ifill { height: 100%; }
+  .ifill.thr { width: 76%; background: #00e676; }
+  .ifill.brk { width: 12%; background: #ff3b30; }
+  .tires {
+    display: grid;
+    grid-template-columns: 17px 17px;
+    gap: 3px;
+  }
+  .tt {
+    font-size: 11px;
+    font-weight: 700;
+    color: #06140d;
+    text-align: center;
+    border-radius: 3px;
+    padding: 2px 0;
+    background: #34e39a;
+  }
+  .gpod {
+    width: 76px;
+    height: 76px;
+    text-align: center;
+  }
+  .gbox {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 36px;
+    height: 36px;
+    transform: translate(-50%, -50%);
+  }
+  .gbox .ln {
+    position: absolute;
+    background: rgba(255,255,255,.1);
+  }
+  .gbox .ln.v { left: 50%; top: 0; bottom: 0; width: 1px; }
+  .gbox .ln.h { top: 50%; left: 0; right: 0; height: 1px; }
+  .gdot {
+    position: absolute;
+    left: 63%;
+    top: 34%;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #19e0ff;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 6px #19e0ff;
+  }
+  .gval {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 58px;
+    font-size: 9px;
+    line-height: 1;
+    font-weight: 600;
+    color: #8a93a0;
+  }
+  .notes {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .note {
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(9, 14, 20, .40);
+  }
+  .note b {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: #d9e2ec;
+  }
+  .note span {
+    display: block;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #96a3b4;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>HUD 边框软化设计稿</h1>
+  <p class="sub">方案 2 + 方案 3 修订版：使用实际车尾赛道截图验证可读性；回退到上一版扩散泛光与柔化圆舱方向。</p>
+
+  <div class="grid">
+    <section class="case">
+      <div class="case-head">
+        <h2>当前观感：硬描边</h2>
+        <span class="tag">主体 alpha .30 / 轮廓 2-2.5px</span>
+      </div>
+      <div class="stage">
+        <div class="wrap" data-variant="hard"></div>
+      </div>
+    </section>
+
+    <section class="case">
+      <div class="case-head">
+        <h2>提案：Soft Frame</h2>
+        <span class="tag">无硬结构曲线 / 扩散泛光 / 柔化侧舱</span>
+      </div>
+      <div class="stage">
+        <div class="wrap" data-variant="soft"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <b>线宽</b>
+      <span>提案版不画转速圆环、时速圆环和中间连接段的硬结构线，只保留转速弧本身。</span>
+    </div>
+    <div class="note">
+      <b>柔光</b>
+      <span>回退到上一版更发散的主体彩色泛光；侧舱恢复低透明柔化圆形背景。</span>
+    </div>
+    <div class="note">
+      <b>实现边界</b>
+      <span>后续落地只改 SVG 装饰层，不改遥测、布局、透明度滑块和点击穿透逻辑。</span>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  var BODY = "M220.4,38.7 Q232.7,46 252.7,46 L407.3,46 Q427.3,46 439.6,38.7 " +
+    "A72,72 0 1 1 439.6,169.3 Q427.3,162 407.3,162 L252.7,162 Q232.7,162 220.4,169.3 " +
+    "A72,72 0 1 1 220.4,38.7 Z";
+  var CX = 190, CY = 104, R = 54, A0 = 135, SPAN = 270;
+  var STOPS = [[31,223,95],[255,224,0],[255,138,0],[255,45,45]];
+  function el(tag, attrs) {
+    var n = document.createElementNS(NS, tag);
+    Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+    return n;
+  }
+  function div(cls, text) {
+    var n = document.createElement("div");
+    n.className = cls || "";
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function lerp(a, b, f) { return Math.round(a + (b - a) * f); }
+  function revColor(p) {
+    var s = Math.max(0, Math.min(1, p)) * 3;
+    var i = Math.min(2, Math.floor(s));
+    var f = s - i;
+    var a = STOPS[i], b = STOPS[i + 1];
+    return "rgb(" + lerp(a[0], b[0], f) + "," + lerp(a[1], b[1], f) + "," + lerp(a[2], b[2], f) + ")";
+  }
+  function pt(deg) {
+    var r = deg * Math.PI / 180;
+    return [CX + R * Math.cos(r), CY + R * Math.sin(r)];
+  }
+  function arc(a1, a2) {
+    var p1 = pt(a1), p2 = pt(a2);
+    return "M" + p1[0] + "," + p1[1] + " A" + R + "," + R + " 0 " + (a2 - a1 > 180 ? 1 : 0) + " 1 " + p2[0] + "," + p2[1];
+  }
+  function build(wrap) {
+    var soft = wrap.dataset.variant === "soft";
+    var svg = el("svg", { class: "layer", viewBox: "0 0 660 204" });
+    var defs = el("defs");
+    var filter = el("filter", { id: "softBlur-" + wrap.dataset.variant, x: "-18%", y: "-26%", width: "136%", height: "152%" });
+    filter.appendChild(el("feGaussianBlur", { stdDeviation: soft ? "4.2" : "1.35" }));
+    defs.appendChild(filter);
+    svg.appendChild(defs);
+
+    if (soft) {
+      svg.appendChild(el("path", {
+        d: BODY,
+        fill: "none",
+        stroke: "#42df91",
+        "stroke-width": "8",
+        opacity: ".22",
+        filter: "url(#softBlur-soft)"
+      }));
+      svg.appendChild(el("path", {
+        d: BODY,
+        fill: "none",
+        stroke: "#42df91",
+        "stroke-width": "2",
+        opacity: ".24",
+        style: "filter:drop-shadow(0 0 10px rgba(66,223,145,.72)) drop-shadow(0 0 24px rgba(66,223,145,.48))"
+      }));
+    } else {
+      svg.appendChild(el("path", {
+        d: BODY,
+        fill: "none",
+        stroke: "#42df91",
+        "stroke-width": "2",
+        opacity: ".46",
+        style: "filter:drop-shadow(0 0 4px #42df91) drop-shadow(0 0 12px #42df91)"
+      }));
+    }
+
+    if (!soft) {
+      svg.appendChild(el("path", { d: BODY, fill: "#11161e", opacity: ".30" }));
+      svg.appendChild(el("path", {
+        d: BODY,
+        fill: "none",
+        stroke: "#2a323d",
+        "stroke-width": "2.5",
+        opacity: ".82"
+      }));
+    } else {
+      svg.appendChild(el("path", { d: BODY, fill: "#11161e", opacity: ".30" }));
+    }
+
+    [[190,104,70],[470,104,70]].forEach(function (c) {
+      if (!soft) {
+        svg.appendChild(el("circle", {
+          cx: c[0], cy: c[1], r: c[2],
+          fill: "none",
+          stroke: "#2a323d",
+          "stroke-width": "2",
+          opacity: "1"
+        }));
+      }
+    });
+
+    var rpm = el("g");
+    rpm.appendChild(el("path", {
+      d: arc(A0, A0 + SPAN),
+      fill: "none",
+      stroke: "#20242c",
+      "stroke-width": soft ? "6.25" : "7",
+      "stroke-linecap": "round",
+      opacity: soft ? ".80" : "1"
+    }));
+    for (var i = 0; i < 256; i++) {
+      if (i > 204) break;
+      var a1 = A0 + SPAN * i / 256 + .04;
+      var a2 = A0 + SPAN * (i + 1) / 256 - .04;
+      rpm.appendChild(el("path", {
+        d: arc(a1, a2),
+        fill: "none",
+        stroke: revColor(i / 255),
+        "stroke-width": soft ? "6.25" : "7",
+        "stroke-linecap": "round",
+        opacity: "1"
+      }));
+    }
+    svg.appendChild(rpm);
+
+    [[58,104],[602,104]].forEach(function (c) {
+      svg.appendChild(el("circle", { cx: c[0], cy: c[1], r: "38", fill: "#11161e", opacity: ".30" }));
+      if (soft) {
+        svg.appendChild(el("circle", {
+          cx: c[0], cy: c[1], r: "38",
+          fill: "none",
+          stroke: "#96a8bd",
+          "stroke-width": "5",
+          opacity: ".12",
+          filter: "url(#softBlur-soft)"
+        }));
+      } else {
+        svg.appendChild(el("circle", {
+          cx: c[0], cy: c[1], r: "38",
+          fill: "none",
+          stroke: "#2a323d",
+          "stroke-width": "2.5",
+          opacity: "1"
+        }));
+      }
+    });
+
+    wrap.appendChild(svg);
+    var rev = div("ov rev");
+    rev.style.cssText = "left:261px; top:54px;";
+    for (var j = 0; j < 13; j++) {
+      var led = div("led");
+      var on = j < 10;
+      var col = revColor(j / 12);
+      led.style.background = on ? col : "#1c2128";
+      led.style.boxShadow = on ? "0 0 5px " + col : "none";
+      rev.appendChild(led);
+    }
+    wrap.appendChild(rev);
+
+    var rpmBox = div("ov rpm-box");
+    rpmBox.style.cssText = "left:190px; top:84px; transform:translateX(-50%);";
+    rpmBox.appendChild(div("lbl", "RPM"));
+    rpmBox.appendChild(div("v", "8420"));
+    wrap.appendChild(rpmBox);
+
+    var gear = div("ov gear", "5");
+    gear.style.cssText = "left:290px; top:66px;";
+    wrap.appendChild(gear);
+
+    var inputs = div("ov inputs");
+    inputs.style.cssText = "left:261px; top:143px;";
+    var brk = div("itrack brk"); brk.appendChild(div("ifill brk"));
+    var thr = div("itrack"); thr.appendChild(div("ifill thr"));
+    inputs.appendChild(brk); inputs.appendChild(thr);
+    wrap.appendChild(inputs);
+
+    var spd = div("ov spd-box");
+    spd.style.cssText = "left:470px; top:76px; transform:translateX(-50%);";
+    spd.appendChild(div("lbl", "KMH"));
+    spd.appendChild(div("v", "276"));
+    var st = div("steer-track"); st.appendChild(div("steer-ind"));
+    spd.appendChild(st);
+    spd.appendChild(div("steer-lbl", "STEER"));
+    wrap.appendChild(spd);
+
+    var tires = div("ov tires");
+    tires.style.cssText = "left:58px; top:104px; transform:translate(-50%,-50%);";
+    ["82","84","96","98"].forEach(function (x) { tires.appendChild(div("tt", x)); });
+    wrap.appendChild(tires);
+
+    var gpod = div("ov gpod");
+    gpod.style.cssText = "left:602px; top:104px; transform:translate(-50%,-50%);";
+    var gbox = div("gbox");
+    gbox.appendChild(div("ln v"));
+    gbox.appendChild(div("ln h"));
+    gbox.appendChild(div("gdot"));
+    gpod.appendChild(gbox);
+    gpod.appendChild(div("gval", "0.9 G"));
+    wrap.appendChild(gpod);
+  }
+  document.querySelectorAll(".wrap").forEach(build);
+})();
+</script>
+</body>
+</html>

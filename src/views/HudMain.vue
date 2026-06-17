@@ -30,6 +30,10 @@ function revColor(p: number): string {
   const b = RPM_STOPS[i + 1];
   return `rgb(${lerp(a[0], b[0], f)}, ${lerp(a[1], b[1], f)}, ${lerp(a[2], b[2], f)})`;
 }
+function colorRamp(p: number, from: [number, number, number], to: [number, number, number]): string {
+  p = Math.min(1, Math.max(0, p));
+  return `rgb(${lerp(from[0], to[0], p)}, ${lerp(from[1], to[1], p)}, ${lerp(from[2], to[2], p)})`;
+}
 
 // ---- 转速渐变弧几何（左圆环） ----
 const CX = 190;
@@ -38,20 +42,34 @@ const ARC_R = 54;
 const A0 = 135;
 const SPAN = 270;
 const ARC_SEG = 256;
+const INPUT_CX = 470;
+const INPUT_CY = 104;
+const INPUT_R = 54;
+const INPUT_SEG = 192;
+const INPUT_TOP_GAP = 8;
+const INPUT_SPAN = (SPAN - INPUT_TOP_GAP) / 2;
 const BODY_PATH =
-  "M220.4,38.7 Q232.7,46 252.7,46 L407.3,46 Q427.3,46 439.6,38.7 " +
-  "A72,72 0 1 1 439.6,169.3 Q427.3,162 407.3,162 L252.7,162 Q232.7,162 220.4,169.3 " +
+  "M220.4,38.7 C232,45 242,55 258,55 L402,55 C418,55 428,45 439.6,38.7 " +
+  "A72,72 0 1 1 439.6,169.3 C424,164 410,164 392,164 L268,164 C250,164 236,164 220.4,169.3 " +
   "A72,72 0 1 1 220.4,38.7 Z";
 
 function arcPt(deg: number): [number, number] {
   const r = (deg * Math.PI) / 180;
   return [CX + ARC_R * Math.cos(r), CY + ARC_R * Math.sin(r)];
 }
+function polarPt(cx: number, cy: number, radius: number, deg: number): [number, number] {
+  const r = (deg * Math.PI) / 180;
+  return [cx + radius * Math.cos(r), cy + radius * Math.sin(r)];
+}
+function arcSegFor(cx: number, cy: number, radius: number, a1: number, a2: number): string {
+  const [x1, y1] = polarPt(cx, cy, radius, a1);
+  const [x2, y2] = polarPt(cx, cy, radius, a2);
+  const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
+  const sweep = a2 >= a1 ? 1 : 0;
+  return `M${x1},${y1} A${radius},${radius} 0 ${large} ${sweep} ${x2},${y2}`;
+}
 function arcSeg(a1: number, a2: number): string {
-  const [x1, y1] = arcPt(a1);
-  const [x2, y2] = arcPt(a2);
-  const large = a2 - a1 > 180 ? 1 : 0;
-  return `M${x1},${y1} A${ARC_R},${ARC_R} 0 ${large} 1 ${x2},${y2}`;
+  return arcSegFor(CX, CY, ARC_R, a1, a2);
 }
 const arcTrack = arcSeg(A0, A0 + SPAN);
 const arcBars = Array.from({ length: ARC_SEG }, (_, i) => {
@@ -59,6 +77,30 @@ const arcBars = Array.from({ length: ARC_SEG }, (_, i) => {
   const a1 = A0 + (SPAN * i) / ARC_SEG + gap / 2;
   const a2 = A0 + (SPAN * (i + 1)) / ARC_SEG - gap / 2;
   return { d: arcSeg(a1, a2), color: revColor(i / (ARC_SEG - 1)) };
+});
+const brakeTrack = arcSegFor(INPUT_CX, INPUT_CY, INPUT_R, -90 - INPUT_TOP_GAP / 2, -90 - INPUT_TOP_GAP / 2 - INPUT_SPAN);
+const throttleTrack = arcSegFor(INPUT_CX, INPUT_CY, INPUT_R, -90 + INPUT_TOP_GAP / 2, -90 + INPUT_TOP_GAP / 2 + INPUT_SPAN);
+const brakeBars = Array.from({ length: INPUT_SEG }, (_, i) => {
+  const gap = 0.12;
+  const start = -90 - INPUT_TOP_GAP / 2;
+  const bottom = start - INPUT_SPAN;
+  const a1 = bottom + (INPUT_SPAN * i) / INPUT_SEG + gap / 2;
+  const a2 = bottom + (INPUT_SPAN * (i + 1)) / INPUT_SEG - gap / 2;
+  return {
+    d: arcSegFor(INPUT_CX, INPUT_CY, INPUT_R, a1, a2),
+    color: colorRamp(i / (INPUT_SEG - 1), [255, 127, 120], [255, 59, 48]),
+  };
+});
+const throttleBars = Array.from({ length: INPUT_SEG }, (_, i) => {
+  const gap = 0.12;
+  const start = -90 + INPUT_TOP_GAP / 2;
+  const bottom = start + INPUT_SPAN;
+  const a1 = bottom - (INPUT_SPAN * i) / INPUT_SEG - gap / 2;
+  const a2 = bottom - (INPUT_SPAN * (i + 1)) / INPUT_SEG + gap / 2;
+  return {
+    d: arcSegFor(INPUT_CX, INPUT_CY, INPUT_R, a1, a2),
+    color: colorRamp(i / (INPUT_SEG - 1), [86, 242, 160], [0, 230, 118]),
+  };
 });
 
 // ---- 换挡灯 ----
@@ -74,7 +116,7 @@ const litLeds = computed(() => Math.round(rpmPct.value * SEG));
 const redline = computed(() => rpmPct.value >= 0.9);
 const glowColor = computed(() => revColor(rpmPct.value));
 const glowStyle = computed(() => ({
-  filter: `drop-shadow(0 0 4px ${glowColor.value}) drop-shadow(0 0 12px ${glowColor.value})`,
+  filter: `drop-shadow(0 0 8px ${glowColor.value}) drop-shadow(0 0 18px ${glowColor.value})`,
 }));
 const panelOpacity = computed(() => config.bg_opacity);
 
@@ -91,6 +133,8 @@ function gearLabel(g: number): string {
 // ---- 油门 / 刹车 / 转向 ----
 const throttle = computed(() => (t.value ? Math.round((t.value.accel / 255) * 100) : 0));
 const brake = computed(() => (t.value ? Math.round((t.value.brake / 255) * 100) : 0));
+const litBrakeBars = computed(() => Math.round((brake.value / 100) * INPUT_SEG));
+const litThrottleBars = computed(() => Math.round((throttle.value / 100) * INPUT_SEG));
 const steerOffset = computed(() => {
   const s = t.value ? Math.max(-1, Math.min(1, t.value.steer / 127)) : 0;
   return s * 42; // 与预览一致：指示点在轨道内 ±42%
@@ -143,18 +187,37 @@ const dotY = computed(() => {
       <div class="wrap" :style="{ opacity: config.fg_opacity }" @pointerdown="onDragDown">
         <template v-if="t">
           <svg class="layer" :viewBox="`0 0 ${BASE_W} ${BASE_H}`">
-            <!-- 外发光（贴轮廓，画在主体下层只透出光晕） -->
-            <path :d="BODY_PATH" fill="none" :stroke="glowColor" stroke-width="2" opacity=".46" :style="glowStyle" />
+            <defs>
+              <filter id="soft-frame-blur" x="-18%" y="-26%" width="136%" height="152%">
+                <feGaussianBlur stdDeviation="6.5" />
+              </filter>
+              <radialGradient
+                id="body-dark-scrim"
+                gradientUnits="userSpaceOnUse"
+                cx="330"
+                cy="116"
+                r="250"
+                gradientTransform="translate(330 116) scale(1 .46) translate(-330 -116)"
+              >
+                <stop offset="0" stop-color="#000000" stop-opacity=".48" />
+                <stop offset=".56" stop-color="#000000" stop-opacity=".25" />
+                <stop offset="1" stop-color="#000000" stop-opacity="0" />
+              </radialGradient>
+              <radialGradient id="pod-dark-scrim">
+                <stop offset="0" stop-color="#000000" stop-opacity=".42" />
+                <stop offset=".66" stop-color="#000000" stop-opacity=".22" />
+                <stop offset="1" stop-color="#000000" stop-opacity="0" />
+              </radialGradient>
+            </defs>
+            <!-- Soft Frame：保留功能泛光，弱化结构实线 -->
+            <path :d="BODY_PATH" fill="none" :stroke="glowColor" stroke-width="12" opacity=".14" filter="url(#soft-frame-blur)" />
+            <path :d="BODY_PATH" fill="none" :stroke="glowColor" stroke-width="1.5" opacity=".16" :style="glowStyle" />
             <!-- 半透明主体，透明度受 bg_opacity 控制 -->
             <path :d="BODY_PATH" fill="#11161e" :opacity="panelOpacity" />
-            <!-- 描边收口 -->
-            <path :d="BODY_PATH" fill="none" stroke="#2a323d" stroke-width="2.5" opacity=".82" />
-            <!-- 左右大圆环外圈 -->
-            <circle cx="190" cy="104" r="70" fill="none" stroke="#2a323d" stroke-width="2" />
-            <circle cx="470" cy="104" r="70" fill="none" stroke="#2a323d" stroke-width="2" />
+            <path :d="BODY_PATH" fill="url(#body-dark-scrim)" opacity=".72" />
             <!-- 转速渐变弧 -->
             <g>
-              <path :d="arcTrack" fill="none" stroke="#20242c" stroke-width="7" stroke-linecap="round" />
+              <path :d="arcTrack" fill="none" stroke="#20242c" stroke-width="6.25" stroke-linecap="round" opacity=".8" />
               <g :class="{ flash: redline }">
                 <path
                   v-for="(bar, i) in arcBars"
@@ -162,27 +225,54 @@ const dotY = computed(() => {
                   :d="bar.d"
                   fill="none"
                   :stroke="bar.color"
-                  stroke-width="7"
+                  stroke-width="6.25"
                   stroke-linecap="round"
                   :style="{ opacity: i < litBars ? 1 : 0 }"
                 />
               </g>
             </g>
+            <!-- 右圆输入弧：左刹车 / 右油门 -->
+            <g v-if="config.show_inputs">
+              <path :d="brakeTrack" fill="none" stroke="#20242c" stroke-width="6.25" stroke-linecap="round" opacity=".72" />
+              <path :d="throttleTrack" fill="none" stroke="#20242c" stroke-width="6.25" stroke-linecap="round" opacity=".72" />
+              <path
+                v-for="(bar, i) in brakeBars"
+                :key="`brake-${i}`"
+                :d="bar.d"
+                fill="none"
+                :stroke="bar.color"
+                stroke-width="6.25"
+                stroke-linecap="round"
+                :style="{ opacity: i < litBrakeBars ? 1 : 0 }"
+              />
+              <path
+                v-for="(bar, i) in throttleBars"
+                :key="`throttle-${i}`"
+                :d="bar.d"
+                fill="none"
+                :stroke="bar.color"
+                stroke-width="6.25"
+                stroke-linecap="round"
+                :style="{ opacity: i < litThrottleBars ? 1 : 0 }"
+              />
+            </g>
             <!-- 侧舱圆环：左轮胎 / 右 G 力 -->
-            <g style="filter: drop-shadow(0 0 3px rgba(120, 140, 170, 0.3))">
+            <g>
               <template v-if="config.show_tires">
                 <circle cx="58" cy="104" r="38" fill="#11161e" :opacity="panelOpacity" />
-                <circle cx="58" cy="104" r="38" fill="none" stroke="#2a323d" stroke-width="2.5" />
+                <circle cx="58" cy="104" r="38" fill="url(#pod-dark-scrim)" opacity=".78" />
+                <circle cx="58" cy="104" r="38" fill="none" stroke="#96a8bd" stroke-width="5" opacity=".12" filter="url(#soft-frame-blur)" />
               </template>
               <template v-if="config.show_gforce">
                 <circle cx="602" cy="104" r="38" fill="#11161e" :opacity="panelOpacity" />
-                <circle cx="602" cy="104" r="38" fill="none" stroke="#2a323d" stroke-width="2.5" />
+                <circle cx="602" cy="104" r="38" fill="url(#pod-dark-scrim)" opacity=".78" />
+                <circle cx="602" cy="104" r="38" fill="none" stroke="#96a8bd" stroke-width="5" opacity=".12" filter="url(#soft-frame-blur)" />
               </template>
             </g>
           </svg>
 
           <!-- 换挡灯 -->
-          <div class="ov rev" :class="{ flash: redline }" style="left: 261px; top: 54px">
+          <div class="ov rev" :class="{ flash: redline }" style="left: 261px; top: 60px">
             <div
               v-for="(c, i) in ledColors"
               :key="i"
@@ -201,22 +291,18 @@ const dotY = computed(() => {
           </div>
 
           <!-- 档位 -->
-          <div class="ov gear" :class="{ redline }" style="left: 290px; top: 66px">{{ gearLabel(t.gear) }}</div>
+          <div class="ov gear" :class="{ redline }" style="left: 290px; top: 73px">{{ gearLabel(t.gear) }}</div>
 
-          <!-- 油门 / 刹车 -->
-          <div v-if="config.show_inputs" class="ov inputs" style="left: 261px; top: 143px">
-            <div class="itrack brk"><div class="ifill brk" :style="{ width: brake + '%' }"></div></div>
-            <div class="itrack"><div class="ifill thr" :style="{ width: throttle + '%' }"></div></div>
+          <!-- 转向 -->
+          <div v-if="config.show_inputs" class="ov center-steer" style="left: 330px; top: 145px; transform: translateX(-50%)">
+            <div class="steer-track"><div class="steer-ind" :style="{ left: `calc(50% + ${steerOffset}%)` }"></div></div>
+            <div class="steer-lbl">STEER</div>
           </div>
 
-          <!-- 速度 + 转向 -->
-          <div class="ov spd-box" style="left: 470px; top: 76px; transform: translateX(-50%)">
+          <!-- 速度 -->
+          <div class="ov spd-box" style="left: 470px; top: 84px; transform: translateX(-50%)">
             <div class="lbl">{{ speedUnit }}</div>
             <div class="v">{{ speedDisplay }}</div>
-            <template v-if="config.show_inputs">
-              <div class="steer-track"><div class="steer-ind" :style="{ left: `calc(50% + ${steerOffset}%)` }"></div></div>
-              <div class="steer-lbl">STEER</div>
-            </template>
           </div>
 
           <!-- 左舱：轮胎 -->
@@ -313,13 +399,17 @@ const dotY = computed(() => {
 /* 转速数字 */
 .rpm-box {
   text-align: center;
+  width: 112px;
 }
 .rpm-box .lbl,
 .spd-box .lbl {
+  display: block;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 3px;
-  color: #7d8794;
+  text-indent: 3px;
+  color: #9aa4b2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
 }
 .rpm-box .v {
   font-size: 30px;
@@ -328,6 +418,7 @@ const dotY = computed(() => {
   font-variant-numeric: tabular-nums;
   line-height: 1;
   transition: color 0.1s;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.72), 0 0 1px rgba(0, 0, 0, 0.85);
 }
 .rpm-box.redline .v {
   color: #ff3b30;
@@ -350,6 +441,7 @@ const dotY = computed(() => {
 /* 速度 */
 .spd-box {
   text-align: center;
+  width: 112px;
 }
 .spd-box .v {
   font-size: 34px;
@@ -357,6 +449,7 @@ const dotY = computed(() => {
   color: #fff;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.72), 0 0 1px rgba(0, 0, 0, 0.85);
 }
 .steer-track {
   margin: 7px auto 0;
@@ -384,33 +477,13 @@ const dotY = computed(() => {
   margin-top: 3px;
 }
 
-/* 油门 / 刹车 */
-.inputs {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  width: 138px;
+/* 中央转向条 */
+.center-steer {
+  width: 122px;
+  text-align: center;
 }
-.itrack {
-  width: 66px;
-  height: 7px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  overflow: hidden;
-  display: flex;
-}
-.itrack.brk {
-  justify-content: flex-end;
-}
-.ifill {
-  height: 100%;
-  transition: width 0.05s linear;
-}
-.ifill.thr {
-  background: #00e676;
-}
-.ifill.brk {
-  background: #ff3b30;
+.center-steer .steer-track {
+  width: 112px;
 }
 
 /* 轮胎 */
