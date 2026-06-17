@@ -37,9 +37,9 @@ function onPortInput(event: Event) {
 
 function savePort() {
   const raw = portDraft.value.trim();
-  const fallback = Number(config.port) || 5300;
+  const fallback = Number(config.port) || 10989;
   const n = raw === "" ? fallback : Math.round(Number(raw));
-  config.port = Number.isFinite(n) ? Math.min(65535, Math.max(1, n)) : 5300;
+  config.port = Number.isFinite(n) ? Math.min(65535, Math.max(1, n)) : 10989;
   portDraft.value = String(config.port);
   portFocused = false;
   updateConfig();

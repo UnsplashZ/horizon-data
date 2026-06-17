@@ -14,7 +14,7 @@
  *       if (t.IsRaceOn) console.log(t.CurrentEngineRpm, t.Speed * 3.6, t.Gear);
  *     }
  *   });
- *   sock.bind(5300, "0.0.0.0");
+ *   sock.bind(10989, "0.0.0.0");
  */
 
 export const FH6_PACKET_SIZE = 324;

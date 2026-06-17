@@ -40,8 +40,8 @@ npm run tauri build  # 构建桌面应用包
 遥测链路调试：
 
 ```bash
-npm run listen       # 监听 UDP:5300 并打印关键遥测
-npm run fake         # 向 127.0.0.1:5300 发送伪造 324B 包
+npm run listen       # 监听 UDP:10989 并打印关键遥测
+npm run fake         # 向 127.0.0.1:10989 发送伪造 324B 包
 ```
 
 注意：`tools/*.ts` 直接由 `node` 执行，当前写法依赖支持直接运行 TypeScript 的新版本 Node；若本机 Node 不支持，先不要改业务逻辑，优先确认运行时版本或改用合适的 TS runner。

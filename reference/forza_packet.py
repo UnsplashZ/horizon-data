@@ -13,7 +13,7 @@ HandBrake=318, Gear=319, Steer=320。
     from forza_packet import FORMAT, FIELDS, parse
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("0.0.0.0", 5300))
+    sock.bind(("0.0.0.0", 10989))
     while True:
         data, _ = sock.recvfrom(1024)
         if len(data) == 324:
@@ -25,7 +25,7 @@ HandBrake=318, Gear=319, Steer=320。
 import struct
 
 PACKET_SIZE = 324  # FH6 / FH5 Car Dash
-DEFAULT_PORTS = (5300,)  # 接收端自定义；游戏设置里需一致
+DEFAULT_PORTS = (10989,)  # 接收端自定义；游戏设置里需一致
 
 # (名称, struct 类型码)  —— 顺序即字节顺序
 # i=s32  I=u32  f=f32  H=u16  B=u8  b=s8  x=填充字节

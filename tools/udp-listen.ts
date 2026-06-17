@@ -2,9 +2,9 @@
  * FH6 遥测链路验证工具：监听 UDP，实时打印 rpm / 速度 / 档位 / 输入。
  *
  * 运行（Node 24+，自带 TS 支持）：
- *   node tools/udp-listen.ts            # 默认端口 5300
- *   node tools/udp-listen.ts 5300       # 指定端口
- *   PORT=5300 node tools/udp-listen.ts
+ *   node tools/udp-listen.ts            # 默认端口 10989
+ *   node tools/udp-listen.ts 10989      # 指定端口
+ *   PORT=10989 node tools/udp-listen.ts
  *
  * 在 Windows 的 FH6 里把 Data Out 目标 IP 填本机/本工具所在机器的局域网 IP，
  * 端口与此处一致，进入比赛即可看到数据滚动。
@@ -14,7 +14,7 @@ import dgram from "node:dgram";
 import os from "node:os";
 import { parseForzaPacket, FH6_PACKET_SIZE } from "../reference/forzaPacket.ts";
 
-const PORT = Number(process.argv[2] ?? process.env.PORT ?? 5300);
+const PORT = Number(process.argv[2] ?? process.env.PORT ?? 10989);
 const HOST = "0.0.0.0";
 
 /** 列出本机所有非内网回环的 IPv4，便于在游戏里填对地址 */

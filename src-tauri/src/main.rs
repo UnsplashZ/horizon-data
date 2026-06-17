@@ -54,7 +54,7 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            port: 5300,
+            port: 10989,
             bg_opacity: 0.72,
             fg_opacity: 1.0,
             units: "kmh".into(),
@@ -441,6 +441,34 @@ fn hide_controls(app: &tauri::AppHandle) {
     }
 }
 
+fn show_hud(app: &tauri::AppHandle) {
+    let editing = EDITING.load(Ordering::Relaxed);
+    for label in OVERLAY_WINDOWS {
+        if let Some(w) = app.get_webview_window(label) {
+            let _ = w.show();
+            let _ = w.set_ignore_cursor_events(!editing);
+        }
+    }
+}
+
+fn toggle_hud_visibility(app: &tauri::AppHandle) {
+    let any_visible = OVERLAY_WINDOWS.iter().any(|label| {
+        app.get_webview_window(label)
+            .and_then(|w| w.is_visible().ok())
+            .unwrap_or(false)
+    });
+
+    if any_visible {
+        for label in OVERLAY_WINDOWS {
+            if let Some(w) = app.get_webview_window(label) {
+                let _ = w.hide();
+            }
+        }
+    } else {
+        show_hud(app);
+    }
+}
+
 fn toggle_controls(app: &tauri::AppHandle, pos: Option<PhysicalPosition<f64>>) {
     if let Some(w) = app.get_webview_window("controls") {
         if w.is_visible().unwrap_or(false) {
@@ -463,11 +491,22 @@ fn clamp01(v: f32) -> f32 {
 fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let open_controls =
         MenuItem::with_id(app, "open_controls", "打开控制面板", true, None::<&str>)?;
+    let toggle_hud = MenuItem::with_id(app, "toggle_hud", "隐藏/显示 HUD", true, None::<&str>)?;
     let edit_layout = MenuItem::with_id(app, "edit_layout", "编辑 HUD 布局", true, None::<&str>)?;
     let lock_hud = MenuItem::with_id(app, "lock_hud", "锁定 HUD", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open_controls, &edit_layout, &lock_hud, &sep, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &open_controls,
+            &toggle_hud,
+            &edit_layout,
+            &lock_hud,
+            &sep,
+            &quit,
+        ],
+    )?;
 
     let mut tray = TrayIconBuilder::with_id("horizon-data")
         .menu(&menu)
@@ -477,7 +516,10 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             let id = event.id();
             if id == "open_controls" {
                 show_controls(app, None);
+            } else if id == "toggle_hud" {
+                toggle_hud_visibility(app);
             } else if id == "edit_layout" {
+                show_hud(app);
                 apply_edit_mode(app, true);
                 show_controls(app, None);
             } else if id == "lock_hud" {

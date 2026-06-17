@@ -5,7 +5,7 @@
 import dgram from "node:dgram";
 import { FIELDS, FH6_PACKET_SIZE } from "../reference/forzaPacket.ts";
 
-const PORT = Number(process.argv[2] ?? process.env.PORT ?? 5300);
+const PORT = Number(process.argv[2] ?? process.env.PORT ?? 10989);
 
 const values: Record<string, number> = {
   IsRaceOn: 1,

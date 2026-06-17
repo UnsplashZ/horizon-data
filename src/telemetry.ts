@@ -30,7 +30,7 @@ export interface Config {
 export const telemetry = ref<Telemetry | null>(null);
 export const editMode = ref(false);
 export const config = reactive<Config>({
-  port: 5300,
+  port: 10989,
   bg_opacity: 0.72,
   fg_opacity: 1.0,
   units: "kmh",
@@ -88,7 +88,7 @@ function normalizedConfig(): Config {
   const fgOpacity = Number(config.fg_opacity);
   return {
     ...config,
-    port: Number.isFinite(port) ? Math.min(65535, Math.max(1, port)) : 5300,
+    port: Number.isFinite(port) ? Math.min(65535, Math.max(1, port)) : 10989,
     bg_opacity: Number.isFinite(bgOpacity) ? Math.min(1, Math.max(0, bgOpacity)) : 0.72,
     fg_opacity: Number.isFinite(fgOpacity) ? Math.min(1, Math.max(0, fgOpacity)) : 1,
     units: config.units === "mph" ? "mph" : "kmh",
