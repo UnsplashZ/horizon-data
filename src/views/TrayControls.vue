@@ -65,6 +65,12 @@ function onPortInput(event: Event) {
   portDraft.value = (event.target as HTMLInputElement).value;
 }
 
+// 失焦即解除编辑态并回显已保存端口，避免未触发 change 时草稿框被锁住、错过外部同步
+function onPortBlur() {
+  portFocused = false;
+  portDraft.value = String(config.port);
+}
+
 async function savePort() {
   const raw = portDraft.value.trim();
   const fallback = Number(config.port) || 10989;
@@ -137,6 +143,7 @@ async function lockHud() {
             @focus="portFocused = true"
             @input="onPortInput"
             @change="savePort"
+            @blur="onPortBlur"
             @keydown.enter.prevent="savePort"
           />
         </label>

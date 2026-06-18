@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { telemetry as t, config, editMode, initShared } from "../telemetry";
+import { telemetry as t, config, editMode, initShared, gearLabel } from "../telemetry";
 import { useOverlayWindow } from "../dragwin";
 
 // 基准画布尺寸与 design-preview-halo.html 的 viewBox 一致
@@ -125,9 +125,6 @@ const speedDisplay = computed(() => {
   return Math.round(config.units === "mph" ? t.value.speed_kmh * 0.621371 : t.value.speed_kmh);
 });
 const speedUnit = computed(() => (config.units === "mph" ? "MPH" : "KMH"));
-function gearLabel(g: number): string {
-  return g === 0 ? "R" : g === 11 ? "N" : String(g);
-}
 
 // ---- 油门 / 刹车 / 转向 ----
 const throttle = computed(() => (t.value ? Math.round((t.value.accel / 255) * 100) : 0));

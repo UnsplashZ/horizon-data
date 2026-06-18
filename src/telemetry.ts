@@ -115,7 +115,8 @@ function normalizedConfig(): Config {
     ...config,
     port: Number.isFinite(port) ? Math.min(65535, Math.max(1, port)) : 10989,
     bg_opacity: Number.isFinite(bgOpacity) ? Math.min(1, Math.max(0, bgOpacity)) : 0.72,
-    fg_opacity: Number.isFinite(fgOpacity) ? Math.min(1, Math.max(0, fgOpacity)) : 1,
+    // HUD 前景下限 0.2，避免滑到全透明后找不到覆盖层（与控制面板滑条 min 一致）
+    fg_opacity: Number.isFinite(fgOpacity) ? Math.min(1, Math.max(0.2, fgOpacity)) : 1,
     units: config.units === "mph" ? "mph" : "kmh",
   };
 }

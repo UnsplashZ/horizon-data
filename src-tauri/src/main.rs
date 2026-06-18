@@ -173,7 +173,8 @@ fn load_config_file() -> Config {
 fn normalize_config(mut c: Config) -> Config {
     c.port = c.port.max(1);
     c.bg_opacity = clamp01(c.bg_opacity);
-    c.fg_opacity = clamp01(c.fg_opacity);
+    // HUD 前景下限 0.2，避免全透明后覆盖层不可见（与前端控制面板滑条 min 一致）
+    c.fg_opacity = c.fg_opacity.clamp(0.2, 1.0);
     if c.units != "mph" {
         c.units = "kmh".into();
     }
