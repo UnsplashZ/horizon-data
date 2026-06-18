@@ -23,6 +23,7 @@ const saved = {
   show_tires: config.show_tires,
   show_inputs: config.show_inputs,
   show_gforce: config.show_gforce,
+  auto_hide_inactive: config.auto_hide_inactive,
 };
 
 function syncSaved() {
@@ -33,6 +34,7 @@ function syncSaved() {
   saved.show_tires = config.show_tires;
   saved.show_inputs = config.show_inputs;
   saved.show_gforce = config.show_gforce;
+  saved.auto_hide_inactive = config.auto_hide_inactive;
 }
 
 onMounted(async () => {
@@ -106,7 +108,7 @@ async function saveNumber<K extends "fg_opacity" | "bg_opacity">(key: K) {
   }
 }
 
-async function saveToggle<K extends "show_tires" | "show_inputs" | "show_gforce">(key: K) {
+async function saveToggle<K extends "show_tires" | "show_inputs" | "show_gforce" | "auto_hide_inactive">(key: K) {
   const ok = await updateConfig();
   if (!ok) {
     config[key] = saved[key];
@@ -200,6 +202,16 @@ async function lockHud() {
           <label><input type="checkbox" v-model="config.show_tires" @change="saveToggle('show_tires')" /> TIRES</label>
           <label><input type="checkbox" v-model="config.show_inputs" @change="saveToggle('show_inputs')" /> INPUTS</label>
           <label><input type="checkbox" v-model="config.show_gforce" @change="saveToggle('show_gforce')" /> G-FORCE</label>
+        </div>
+      </section>
+
+      <section>
+        <div class="title">BEHAVIOR</div>
+        <div class="checks behavior">
+          <label>
+            <input type="checkbox" v-model="config.auto_hide_inactive" @change="saveToggle('auto_hide_inactive')" />
+            AUTO HIDE INACTIVE
+          </label>
         </div>
       </section>
 
@@ -389,6 +401,10 @@ input[type="range"]::-moz-range-thumb {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
+}
+
+.checks.behavior {
+  grid-template-columns: 1fr;
 }
 
 .checks label {

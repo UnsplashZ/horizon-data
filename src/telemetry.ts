@@ -23,6 +23,7 @@ export interface Config {
   show_tires: boolean;   // 统一仪表盘中的轮胎模块
   show_inputs: boolean;  // 统一仪表盘中的输入模块
   show_gforce: boolean;  // 统一仪表盘中的G力模块
+  auto_hide_inactive: boolean; // 非活动状态下自动隐藏 HUD
   pos_main: number[];
   size_main: number[];
 }
@@ -51,6 +52,7 @@ export const config = reactive<Config>({
   show_tires: true,
   show_inputs: true,
   show_gforce: true,
+  auto_hide_inactive: false,
   pos_main: [-1, -1],
   size_main: [0, 0],
 });

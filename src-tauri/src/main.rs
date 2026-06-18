@@ -58,9 +58,10 @@ struct Config {
     bg_opacity: f32,
     fg_opacity: f32,
     units: String,
-    show_tires: bool,  // 统一仪表盘中的轮胎模块
-    show_inputs: bool, // 统一仪表盘中的输入模块
-    show_gforce: bool, // 统一仪表盘中的G力模块
+    show_tires: bool,         // 统一仪表盘中的轮胎模块
+    show_inputs: bool,        // 统一仪表盘中的输入模块
+    show_gforce: bool,        // 统一仪表盘中的G力模块
+    auto_hide_inactive: bool, // 非活动状态下自动隐藏 HUD
     pos_main: [i32; 2],
     size_main: [u32; 2],
 }
@@ -74,6 +75,7 @@ impl Default for Config {
             show_tires: true,
             show_inputs: true,
             show_gforce: true,
+            auto_hide_inactive: false,
             pos_main: [-1, -1],
             size_main: [0, 0],
         }
@@ -359,7 +361,7 @@ fn show_controls(app: &tauri::AppHandle, pos: Option<PhysicalPosition<f64>>) {
 }
 
 fn controls_window_size(w: &tauri::WebviewWindow) -> PhysicalSize<u32> {
-    w.outer_size().unwrap_or(PhysicalSize::new(320, 356))
+    w.outer_size().unwrap_or(PhysicalSize::new(320, 396))
 }
 
 fn controls_position_for_click(

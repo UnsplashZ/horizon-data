@@ -9,7 +9,9 @@ const BASE_H = 204;
 const { scale, onDragDown, onResizeDown } = useOverlayWindow(BASE_W, BASE_H);
 onMounted(initShared);
 
-const dimmed = computed(() => t.value != null && !t.value.is_race_on);
+const inactive = computed(() => t.value != null && !t.value.is_race_on);
+const autoHidden = computed(() => !editMode.value && config.auto_hide_inactive && inactive.value);
+const dimmed = computed(() => inactive.value && !config.auto_hide_inactive);
 
 // ---- 转速分区配色（绿→黄→橙→红插值），换挡灯 / 渐变弧 / 外发光共用 ----
 const RPM_STOPS: [number, number, number][] = [
@@ -170,7 +172,7 @@ const dotY = computed(() => {
 </script>
 
 <template>
-  <div class="win" :class="{ editing: editMode, dim: dimmed }">
+  <div class="win" :class="{ editing: editMode, dim: dimmed, 'auto-hidden': autoHidden }">
     <div
       class="scaler"
       :style="{
@@ -350,6 +352,12 @@ const dotY = computed(() => {
   font-family: "Rajdhani", "Consolas", -apple-system, sans-serif;
   color: #fff;
   user-select: none;
+  transition: opacity 0.18s ease, filter 0.18s ease, visibility 0.18s ease;
+}
+
+.win.auto-hidden {
+  visibility: hidden;
+  opacity: 0;
 }
 .editing .wrap {
   cursor: move;
