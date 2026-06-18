@@ -38,6 +38,19 @@ struct Telemetry {
     tire_temp: [f32; 4],
 }
 
+#[derive(Serialize, Clone, PartialEq)]
+struct UdpStatus {
+    port: u16,
+    listening: bool,
+    error: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+struct ShortcutStatus {
+    registered: bool,
+    error: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 struct Config {
@@ -70,6 +83,8 @@ impl Default for Config {
 struct AppState {
     config: Mutex<Config>,
     desired_port: Arc<AtomicU16>,
+    udp_status: Arc<Mutex<UdpStatus>>,
+    shortcut_status: Mutex<ShortcutStatus>,
 }
 
 fn config_path() -> PathBuf {
@@ -202,15 +217,26 @@ fn update_config(
         let mut c = state.config.lock().unwrap();
         let pos_main = c.pos_main;
         let size_main = c.size_main;
-        *c = normalize_config(config);
-        c.pos_main = pos_main;
-        c.size_main = size_main;
-        save_config_file(&c)?;
+        let mut next = normalize_config(config);
+        next.pos_main = pos_main;
+        next.size_main = size_main;
+        save_config_file(&next)?;
+        *c = next;
         c.clone()
     };
     state.desired_port.store(merged.port, Ordering::Relaxed);
     let _ = app.emit("config", &merged);
     Ok(())
+}
+
+#[tauri::command]
+fn get_udp_status(state: State<AppState>) -> UdpStatus {
+    state.udp_status.lock().unwrap().clone()
+}
+
+#[tauri::command]
+fn get_shortcut_status(state: State<AppState>) -> ShortcutStatus {
+    state.shortcut_status.lock().unwrap().clone()
 }
 
 #[tauri::command]
@@ -485,7 +511,30 @@ fn toggle_edit(app: &tauri::AppHandle) {
 }
 
 fn clamp01(v: f32) -> f32 {
-    v.max(0.0).min(1.0)
+    v.clamp(0.0, 1.0)
+}
+
+fn bind_error_message(port: u16, error: &std::io::Error) -> String {
+    match error.kind() {
+        ErrorKind::AddrInUse => format!("端口 {port} 已被占用"),
+        ErrorKind::PermissionDenied => format!("没有权限监听端口 {port}"),
+        _ => format!("绑定端口 {port} 失败: {error}"),
+    }
+}
+
+fn set_udp_status(app: &tauri::AppHandle, status_store: &Arc<Mutex<UdpStatus>>, next: UdpStatus) {
+    let should_emit = {
+        let mut current = status_store.lock().unwrap();
+        if *current == next {
+            false
+        } else {
+            *current = next.clone();
+            true
+        }
+    };
+    if should_emit {
+        let _ = app.emit("udp-status", &next);
+    }
 }
 
 fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
@@ -549,7 +598,11 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn spawn_udp_listener(app: tauri::AppHandle, desired: Arc<AtomicU16>) {
+fn spawn_udp_listener(
+    app: tauri::AppHandle,
+    desired: Arc<AtomicU16>,
+    udp_status: Arc<Mutex<UdpStatus>>,
+) {
     std::thread::spawn(move || {
         let mut current: u16 = 0;
         let mut socket: Option<UdpSocket> = None;
@@ -563,9 +616,27 @@ fn spawn_udp_listener(app: tauri::AppHandle, desired: Arc<AtomicU16>) {
                         println!("[udp] 监听 0.0.0.0:{want}");
                         socket = Some(s);
                         current = want;
+                        set_udp_status(
+                            &app,
+                            &udp_status,
+                            UdpStatus {
+                                port: want,
+                                listening: true,
+                                error: None,
+                            },
+                        );
                     }
                     Err(e) => {
                         eprintln!("[udp] 绑定 {want} 失败: {e}");
+                        set_udp_status(
+                            &app,
+                            &udp_status,
+                            UdpStatus {
+                                port: want,
+                                listening: false,
+                                error: Some(bind_error_message(want, &e)),
+                            },
+                        );
                         std::thread::sleep(Duration::from_millis(500));
                         continue;
                     }
@@ -590,9 +661,19 @@ fn spawn_udp_listener(app: tauri::AppHandle, desired: Arc<AtomicU16>) {
 fn main() {
     let mut cfg = load_config_file();
     let desired_port = Arc::new(AtomicU16::new(cfg.port));
+    let udp_status = Arc::new(Mutex::new(UdpStatus {
+        port: cfg.port,
+        listening: false,
+        error: None,
+    }));
     let state = AppState {
         config: Mutex::new(cfg.clone()),
         desired_port: desired_port.clone(),
+        udp_status: udp_status.clone(),
+        shortcut_status: Mutex::new(ShortcutStatus {
+            registered: false,
+            error: None,
+        }),
     };
 
     tauri::Builder::default()
@@ -603,6 +684,8 @@ fn main() {
             update_config,
             save_window_pos,
             save_window_size,
+            get_udp_status,
+            get_shortcut_status,
             set_edit_mode,
             quit_app
         ])
@@ -623,14 +706,33 @@ fn main() {
 
             build_tray(&handle)?;
 
-            app.global_shortcut()
-                .on_shortcut("CmdOrCtrl+Shift+H", |app, _shortcut, event| {
+            let shortcut_status = match app.global_shortcut().on_shortcut(
+                "CmdOrCtrl+Shift+H",
+                |app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
                         toggle_edit(app);
                     }
-                })?;
+                },
+            ) {
+                Ok(()) => ShortcutStatus {
+                    registered: true,
+                    error: None,
+                },
+                Err(e) => {
+                    let message = format!("注册快捷键 CmdOrCtrl+Shift+H 失败: {e}");
+                    eprintln!("[shortcut] {message}");
+                    ShortcutStatus {
+                        registered: false,
+                        error: Some(message),
+                    }
+                }
+            };
+            if let Ok(mut status) = app.state::<AppState>().shortcut_status.lock() {
+                *status = shortcut_status.clone();
+            }
+            let _ = app.emit("shortcut-status", &shortcut_status);
 
-            spawn_udp_listener(handle, desired_port.clone());
+            spawn_udp_listener(handle, desired_port.clone(), udp_status.clone());
             Ok(())
         })
         .run(tauri::generate_context!())

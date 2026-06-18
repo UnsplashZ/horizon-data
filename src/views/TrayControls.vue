@@ -1,13 +1,43 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
-import { config, editMode, initShared, quitApp, setEditMode, updateConfig } from "../telemetry";
+import {
+  config,
+  configError,
+  editMode,
+  initShared,
+  quitApp,
+  setEditMode,
+  shortcutStatus,
+  udpStatus,
+  updateConfig,
+} from "../telemetry";
 
 let win: { startDragging: () => Promise<void>; hide: () => Promise<void> } | null = null;
 const portDraft = ref(String(config.port));
 let portFocused = false;
+const saved = {
+  port: config.port,
+  units: config.units,
+  fg_opacity: config.fg_opacity,
+  bg_opacity: config.bg_opacity,
+  show_tires: config.show_tires,
+  show_inputs: config.show_inputs,
+  show_gforce: config.show_gforce,
+};
+
+function syncSaved() {
+  saved.port = config.port;
+  saved.units = config.units;
+  saved.fg_opacity = config.fg_opacity;
+  saved.bg_opacity = config.bg_opacity;
+  saved.show_tires = config.show_tires;
+  saved.show_inputs = config.show_inputs;
+  saved.show_gforce = config.show_gforce;
+}
 
 onMounted(async () => {
   await initShared();
+  syncSaved();
   portDraft.value = String(config.port);
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -35,19 +65,48 @@ function onPortInput(event: Event) {
   portDraft.value = (event.target as HTMLInputElement).value;
 }
 
-function savePort() {
+async function savePort() {
   const raw = portDraft.value.trim();
   const fallback = Number(config.port) || 10989;
   const n = raw === "" ? fallback : Math.round(Number(raw));
   config.port = Number.isFinite(n) ? Math.min(65535, Math.max(1, n)) : 10989;
   portDraft.value = String(config.port);
   portFocused = false;
-  updateConfig();
+  const ok = await updateConfig();
+  if (!ok) {
+    config.port = saved.port;
+    portDraft.value = String(saved.port);
+  } else {
+    syncSaved();
+  }
 }
 
-function saveUnit(unit: "kmh" | "mph") {
+async function saveUnit(unit: "kmh" | "mph") {
   config.units = unit;
-  updateConfig();
+  const ok = await updateConfig();
+  if (!ok) {
+    config.units = saved.units;
+  } else {
+    syncSaved();
+  }
+}
+
+async function saveNumber<K extends "fg_opacity" | "bg_opacity">(key: K) {
+  const ok = await updateConfig();
+  if (!ok) {
+    config[key] = saved[key];
+  } else {
+    syncSaved();
+  }
+}
+
+async function saveToggle<K extends "show_tires" | "show_inputs" | "show_gforce">(key: K) {
+  const ok = await updateConfig();
+  if (!ok) {
+    config[key] = saved[key];
+  } else {
+    syncSaved();
+  }
 }
 
 async function lockHud() {
@@ -87,16 +146,43 @@ async function lockHud() {
         </div>
       </section>
 
+      <section class="status" v-if="udpStatus || configError || shortcutStatus?.error">
+        <div
+          v-if="udpStatus"
+          class="status-line"
+          :class="{ ok: udpStatus.listening && !udpStatus.error, bad: Boolean(udpStatus.error) }"
+        >
+          UDP {{ udpStatus.port }} {{ udpStatus.listening ? "LISTENING" : udpStatus.error ? "ERROR" : "WAITING" }}
+        </div>
+        <div v-if="udpStatus?.error" class="status-msg">{{ udpStatus.error }}</div>
+        <div v-if="configError" class="status-msg">CONFIG {{ configError }}</div>
+        <div v-if="shortcutStatus?.error" class="status-msg">SHORTCUT {{ shortcutStatus.error }}</div>
+      </section>
+
       <section>
         <div class="title">OPACITY</div>
         <label class="slider">
           <span>HUD</span>
-          <input type="range" min="0.2" max="1" step="0.01" v-model.number="config.fg_opacity" @input="updateConfig" />
+          <input
+            type="range"
+            min="0.2"
+            max="1"
+            step="0.01"
+            v-model.number="config.fg_opacity"
+            @input="saveNumber('fg_opacity')"
+          />
           <b>{{ Math.round(config.fg_opacity * 100) }}%</b>
         </label>
         <label class="slider">
           <span>BG</span>
-          <input type="range" min="0" max="1" step="0.01" v-model.number="config.bg_opacity" @input="updateConfig" />
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            v-model.number="config.bg_opacity"
+            @input="saveNumber('bg_opacity')"
+          />
           <b>{{ Math.round(config.bg_opacity * 100) }}%</b>
         </label>
       </section>
@@ -104,9 +190,9 @@ async function lockHud() {
       <section>
         <div class="title">MODULES</div>
         <div class="checks">
-          <label><input type="checkbox" v-model="config.show_tires" @change="updateConfig" /> TIRES</label>
-          <label><input type="checkbox" v-model="config.show_inputs" @change="updateConfig" /> INPUTS</label>
-          <label><input type="checkbox" v-model="config.show_gforce" @change="updateConfig" /> G-FORCE</label>
+          <label><input type="checkbox" v-model="config.show_tires" @change="saveToggle('show_tires')" /> TIRES</label>
+          <label><input type="checkbox" v-model="config.show_inputs" @change="saveToggle('show_inputs')" /> INPUTS</label>
+          <label><input type="checkbox" v-model="config.show_gforce" @change="saveToggle('show_gforce')" /> G-FORCE</label>
         </div>
       </section>
 
@@ -169,14 +255,14 @@ main {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   padding: 14px;
 }
 
 section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .row {
@@ -202,6 +288,30 @@ input[type="number"] {
   font: inherit;
   font-size: 13px;
   font-weight: 900;
+}
+
+.status {
+  gap: 4px;
+}
+
+.status-line,
+.status-msg {
+  box-sizing: border-box;
+  padding: 6px 8px;
+  background: #151a21;
+  color: #dce3ea;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.status-line.ok {
+  color: #18e06f;
+}
+
+.status-line.bad,
+.status-msg {
+  color: #ff7a70;
 }
 
 .seg {

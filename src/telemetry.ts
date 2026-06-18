@@ -27,8 +27,22 @@ export interface Config {
   size_main: number[];
 }
 
+export interface UdpStatus {
+  port: number;
+  listening: boolean;
+  error: string | null;
+}
+
+export interface ShortcutStatus {
+  registered: boolean;
+  error: string | null;
+}
+
 export const telemetry = ref<Telemetry | null>(null);
 export const editMode = ref(false);
+export const udpStatus = ref<UdpStatus | null>(null);
+export const configError = ref<string | null>(null);
+export const shortcutStatus = ref<ShortcutStatus | null>(null);
 export const config = reactive<Config>({
   port: 10989,
   bg_opacity: 0.72,
@@ -63,6 +77,8 @@ export async function initShared() {
   if (inv) {
     try {
       Object.assign(config, await inv<Config>("get_config"));
+      udpStatus.value = await inv<UdpStatus>("get_udp_status");
+      shortcutStatus.value = await inv<ShortcutStatus>("get_shortcut_status");
     } catch {}
   }
   try {
@@ -70,15 +86,24 @@ export async function initShared() {
     await listen<Telemetry>("telemetry", (e) => (telemetry.value = e.payload));
     await listen<Config>("config", (e) => Object.assign(config, e.payload));
     await listen<boolean>("edit-mode", (e) => (editMode.value = e.payload));
+    await listen<UdpStatus>("udp-status", (e) => (udpStatus.value = e.payload));
+    await listen<ShortcutStatus>("shortcut-status", (e) => (shortcutStatus.value = e.payload));
   } catch {}
 }
 
-export async function updateConfig() {
+export async function updateConfig(): Promise<boolean> {
   const inv = await tauri();
-  if (inv) {
-    try {
-      await inv("update_config", { config: normalizedConfig() });
-    } catch {}
+  if (!inv) {
+    configError.value = "Tauri API 不可用";
+    return false;
+  }
+  try {
+    await inv("update_config", { config: normalizedConfig() });
+    configError.value = null;
+    return true;
+  } catch (err) {
+    configError.value = errorMessage(err);
+    return false;
   }
 }
 
@@ -111,6 +136,12 @@ export async function quitApp() {
       await inv("quit_app");
     } catch {}
   }
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return String(err);
 }
 
 /** 数值工具 */
