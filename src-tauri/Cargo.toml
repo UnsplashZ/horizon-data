@@ -1,6 +1,6 @@
 [package]
 name = "horizon-data"
-version = "0.1.8"
+version = "0.1.9"
 description = "Forza Horizon 6 transparent overlay HUD"
 edition = "2021"
 

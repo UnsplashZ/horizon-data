@@ -116,7 +116,21 @@ const rpmPct = computed(() =>
 );
 const litBars = computed(() => Math.round(rpmPct.value * ARC_SEG));
 const litLeds = computed(() => Math.round(rpmPct.value * SEG));
-const redline = computed(() => rpmPct.value >= 0.9);
+// 多段换挡阈值（占 EngineMaxRpm 的比例）：接近→该换挡→触顶。
+// FH6 遥测无独立红线字段，只能用 rpm/max_rpm 近似，详见 docs/forza-horizon-6-telemetry.md。
+const RPM_NEAR = 0.88; // 接近红线：文字转琥珀提醒，不闪
+const RPM_SHIFT = 0.94; // 该换挡：转橙并快闪
+const RPM_LIMIT = 0.99; // 触顶/超转：转红并更快闪
+const rpmStage = computed(() => {
+  const p = rpmPct.value;
+  if (p >= RPM_LIMIT) return 3;
+  if (p >= RPM_SHIFT) return 2;
+  if (p >= RPM_NEAR) return 1;
+  return 0;
+});
+// 闪烁从「该换挡」阶段起，「触顶」阶段加速闪
+const shiftFlash = computed(() => rpmStage.value >= 2);
+const overRev = computed(() => rpmStage.value >= 3);
 const panelOpacity = computed(() => config.bg_opacity);
 const panelSoftOpacity = computed(() => Math.min(0.34, config.bg_opacity * 0.82));
 const panelCoreOpacity = computed(() => config.bg_opacity * 0.5);
@@ -218,7 +232,7 @@ const dotY = computed(() => {
             <!-- 转速渐变弧 -->
             <g>
               <path :d="arcTrack" fill="none" stroke="#20242c" stroke-width="6.25" stroke-linecap="round" opacity=".8" />
-              <g :class="{ flash: redline }">
+              <g :class="{ flash: shiftFlash, 'flash-fast': overRev }">
                 <path
                   v-for="(bar, i) in arcBars"
                   :key="i"
@@ -272,7 +286,7 @@ const dotY = computed(() => {
           </svg>
 
           <!-- 换挡灯 -->
-          <div class="ov rev" :class="{ flash: redline }" style="left: 261px; top: 60px">
+          <div class="ov rev" :class="{ flash: shiftFlash, 'flash-fast': overRev }" style="left: 261px; top: 60px">
             <div
               v-for="(c, i) in ledColors"
               :key="i"
@@ -285,13 +299,13 @@ const dotY = computed(() => {
           </div>
 
           <!-- 转速数字 -->
-          <div class="ov rpm-box" :class="{ redline }" style="left: 190px; top: 84px; transform: translateX(-50%)">
+          <div class="ov rpm-box" :class="`rpm-s${rpmStage}`" style="left: 190px; top: 84px; transform: translateX(-50%)">
             <div class="lbl">RPM</div>
             <div class="v">{{ Math.round(t.rpm) }}</div>
           </div>
 
           <!-- 档位 -->
-          <div class="ov gear" :class="{ redline }" style="left: 290px; top: 73px">{{ gearLabel(t.gear) }}</div>
+          <div class="ov gear" :class="`gear-s${rpmStage}`" style="left: 290px; top: 73px">{{ gearLabel(t.gear) }}</div>
 
           <!-- 转向 -->
           <div v-if="config.show_inputs" class="ov center-steer" style="left: 330px; top: 145px; transform: translateX(-50%)">
@@ -378,9 +392,12 @@ const dotY = computed(() => {
   position: absolute;
 }
 
-/* 红线闪烁 */
+/* 换挡闪烁：该换挡常速，触顶/超转加速 */
 .flash {
   animation: hud-flash 0.1s steps(2) infinite;
+}
+.flash-fast {
+  animation-duration: 0.06s;
 }
 @keyframes hud-flash {
   50% {
@@ -425,7 +442,14 @@ const dotY = computed(() => {
   transition: color 0.1s;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.72), 0 0 1px rgba(0, 0, 0, 0.85);
 }
-.rpm-box.redline .v {
+/* 多段换挡提示：接近(琥珀)→该换挡(橙)→触顶(红) */
+.rpm-box.rpm-s1 .v {
+  color: #ffd000;
+}
+.rpm-box.rpm-s2 .v {
+  color: #ff8a1e;
+}
+.rpm-box.rpm-s3 .v {
   color: #ff3b30;
 }
 
@@ -439,7 +463,13 @@ const dotY = computed(() => {
   color: #fff;
   transition: color 0.1s;
 }
-.gear.redline {
+.gear.gear-s1 {
+  color: #ffd000;
+}
+.gear.gear-s2 {
+  color: #ff8a1e;
+}
+.gear.gear-s3 {
   color: #ff3b30;
 }
 

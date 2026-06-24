@@ -123,13 +123,23 @@ async function lockHud() {
     await win?.hide();
   } catch {}
 }
+
+// 仅关闭控制面板窗口，不改动编辑/锁定状态
+async function closeMenu() {
+  try {
+    await win?.hide();
+  } catch {}
+}
 </script>
 
 <template>
   <div class="panel">
     <header @pointerdown="onTitleDown">
       <span>HORIZON DATA</span>
-      <strong>{{ editMode ? "EDIT" : "LOCK" }}</strong>
+      <div class="head-right">
+        <strong>{{ editMode ? "EDIT" : "LOCK" }}</strong>
+        <button class="close" title="关闭菜单" @pointerdown.stop @click="closeMenu">×</button>
+      </div>
     </header>
 
     <main>
@@ -268,6 +278,33 @@ header strong {
   color: #041006;
   font-size: 10px;
   letter-spacing: 1px;
+}
+
+.head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+button.close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  background: #151a21;
+  color: #8a929d;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+button.close:hover {
+  background: #ff4d4d;
+  color: #fff;
 }
 
 main {
