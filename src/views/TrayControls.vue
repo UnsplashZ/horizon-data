@@ -121,14 +121,18 @@ async function lockHud() {
   await setEditMode(false);
   try {
     await win?.hide();
-  } catch {}
+  } catch (error) {
+    console.error("隐藏控制面板失败", error);
+  }
 }
 
 // 仅关闭控制面板窗口，不改动编辑/锁定状态
 async function closeMenu() {
   try {
     await win?.hide();
-  } catch {}
+  } catch (error) {
+    console.error("关闭控制面板失败", error);
+  }
 }
 </script>
 
