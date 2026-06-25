@@ -57,5 +57,6 @@ jobs:
 
             首次运行：macOS 右键打开绕过 Gatekeeper；Windows 在 SmartScreen 点“仍要运行”。
             使用：进入 FH6 → Data Out 指向本机/局域网 IP:10989；⌘/Ctrl+Shift+H 进入编辑模式。
-          prerelease: true
+          # 打 tag（v*）= 正式版；手动触发的 dev 构建仍为 pre-release
+          prerelease: ${{ github.ref_type != 'tag' }}
           args: ${{ matrix.args }}

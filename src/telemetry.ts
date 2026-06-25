@@ -4,6 +4,7 @@ export interface Telemetry {
   is_race_on: boolean;
   rpm: number;
   max_rpm: number;
+  power: number; // 当前功率 W
   speed_kmh: number;
   gear: number;
   accel: number; // 0..255

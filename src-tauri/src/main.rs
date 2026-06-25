@@ -27,6 +27,7 @@ struct Telemetry {
     is_race_on: bool,
     rpm: f32,
     max_rpm: f32,
+    power: f32, // 当前功率，单位 W（offset 260）
     speed_kmh: f32,
     gear: u8,
     accel: u8,
@@ -285,6 +286,7 @@ fn parse(b: &[u8]) -> Telemetry {
         is_race_on: read_i32(b, 0) == 1,
         max_rpm: read_f32(b, 8),
         rpm: read_f32(b, 16),
+        power: read_f32(b, 260),
         accel_x: read_f32(b, 20),
         accel_z: read_f32(b, 28),
         tire_slip: [

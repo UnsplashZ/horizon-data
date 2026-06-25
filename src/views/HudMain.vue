@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { telemetry as t, config, editMode, initShared, gearLabel } from "../telemetry";
 import { useOverlayWindow } from "../dragwin";
 
@@ -131,6 +131,37 @@ const rpmStage = computed(() => {
 // 闪烁从「该换挡」阶段起，「触顶」阶段加速闪
 const shiftFlash = computed(() => rpmStage.value >= 2);
 const overRev = computed(() => rpmStage.value >= 3);
+// ---- 马力 / 最优换挡点（标在转速弧上）----
+const peakPowerW = ref(0); // 已记录峰值功率(W)
+const peakPowerRpm = ref(0); // 峰值功率对应的转速 → 最优换挡点；离开比赛时重置
+const curPowerW = ref(0);
+watch(t, (cur) => {
+  if (!cur || !cur.is_race_on) {
+    peakPowerW.value = 0;
+    peakPowerRpm.value = 0;
+    curPowerW.value = 0;
+    return;
+  }
+  const p = Math.max(0, cur.power); // 负功率（发动机制动）按 0
+  curPowerW.value = p;
+  if (p > peakPowerW.value) {
+    peakPowerW.value = p;
+    peakPowerRpm.value = cur.rpm;
+  }
+});
+const curHp = computed(() => Math.round(curPowerW.value / 735.5)); // 当前马力(PS)
+// 转速弧外缘的"最优换挡点"标记（记录到的峰值功率转速）
+const shiftMark = computed(() => {
+  const cur = t.value;
+  if (!cur || cur.max_rpm <= 0 || peakPowerRpm.value <= 0) return null;
+  const a = A0 + SPAN * Math.min(1, peakPowerRpm.value / cur.max_rpm);
+  const [x, y] = polarPt(CX, CY, ARC_R + 7, a); // 贴在弧外缘
+  return { x, y };
+});
+// 当前转速已过换挡点 → 标记与马力数字转橙提示
+const pastShift = computed(() => !!t.value && peakPowerRpm.value > 0 && t.value.rpm >= peakPowerRpm.value);
+const markColor = computed(() => (pastShift.value ? "#ff8a1e" : "#e8edf2"));
+
 const panelOpacity = computed(() => config.bg_opacity);
 const panelSoftOpacity = computed(() => Math.min(0.34, config.bg_opacity * 0.82));
 const panelCoreOpacity = computed(() => config.bg_opacity * 0.5);
@@ -206,6 +237,9 @@ const dotY = computed(() => {
               <filter id="panel-soft-edge" x="-10%" y="-18%" width="120%" height="136%">
                 <feGaussianBlur stdDeviation="2.4" />
               </filter>
+              <filter id="mark-glow" x="-150%" y="-150%" width="400%" height="400%">
+                <feGaussianBlur stdDeviation="2.1" />
+              </filter>
               <radialGradient
                 id="body-dark-scrim"
                 gradientUnits="userSpaceOnUse"
@@ -244,6 +278,11 @@ const dotY = computed(() => {
                   :style="{ opacity: i < litBars ? 1 : 0 }"
                 />
               </g>
+            </g>
+            <!-- 最优换挡点：转速弧外缘一颗发光圆点（记录到的峰值功率转速），越过后转橙 -->
+            <g v-if="shiftMark">
+              <circle :cx="shiftMark.x" :cy="shiftMark.y" r="5" :fill="markColor" opacity="0.35" filter="url(#mark-glow)" />
+              <circle :cx="shiftMark.x" :cy="shiftMark.y" r="2.1" :fill="markColor" />
             </g>
             <!-- 右圆输入弧：左刹车 / 右油门 -->
             <g v-if="config.show_inputs">
@@ -303,6 +342,9 @@ const dotY = computed(() => {
             <div class="lbl">RPM</div>
             <div class="v">{{ Math.round(t.rpm) }}</div>
           </div>
+
+          <!-- 左环内：当前马力；越过最优换挡点转橙 -->
+          <div class="ov pk-ps" :class="{ past: pastShift }" style="left: 190px; top: 132px; transform: translateX(-50%)">{{ curHp }} PS</div>
 
           <!-- 档位 -->
           <div class="ov gear" :class="`gear-s${rpmStage}`" style="left: 290px; top: 73px">{{ gearLabel(t.gear) }}</div>
@@ -471,6 +513,20 @@ const dotY = computed(() => {
 }
 .gear.gear-s3 {
   color: #ff3b30;
+}
+
+/* 左环内：记录的峰值马力（与 RPM/KMH 标签同一灰色字距风格）*/
+.pk-ps {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-indent: 2px;
+  color: #9aa4b2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+  font-variant-numeric: tabular-nums;
+}
+.pk-ps.past {
+  color: #ff8a1e;
 }
 
 /* 速度 */
