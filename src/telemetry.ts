@@ -81,7 +81,9 @@ export async function initShared() {
       Object.assign(config, await inv<Config>("get_config"));
       udpStatus.value = await inv<UdpStatus>("get_udp_status");
       shortcutStatus.value = await inv<ShortcutStatus>("get_shortcut_status");
-    } catch {}
+    } catch (error) {
+      console.error("读取初始配置/状态失败", error);
+    }
   }
   try {
     const { listen } = await import("@tauri-apps/api/event");
@@ -90,7 +92,9 @@ export async function initShared() {
     await listen<boolean>("edit-mode", (e) => (editMode.value = e.payload));
     await listen<UdpStatus>("udp-status", (e) => (udpStatus.value = e.payload));
     await listen<ShortcutStatus>("shortcut-status", (e) => (shortcutStatus.value = e.payload));
-  } catch {}
+  } catch {
+    // 纯浏览器（无 Tauri）下事件 API 不可用，属预期降级，保持静默
+  }
 }
 
 export async function updateConfig(): Promise<boolean> {
@@ -128,7 +132,9 @@ export async function setEditMode(value: boolean) {
   if (inv) {
     try {
       await inv("set_edit_mode", { editing: value });
-    } catch {}
+    } catch (error) {
+      console.error("切换编辑模式失败", error);
+    }
   }
 }
 
@@ -137,7 +143,9 @@ export async function quitApp() {
   if (inv) {
     try {
       await inv("quit_app");
-    } catch {}
+    } catch (error) {
+      console.error("退出应用失败", error);
+    }
   }
 }
 

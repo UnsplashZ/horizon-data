@@ -44,7 +44,9 @@ onMounted(async () => {
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     win = getCurrentWindow() as unknown as typeof win;
-  } catch {}
+  } catch {
+    // 纯浏览器（无 Tauri）下窗口 API 不可用，属预期降级，保持静默
+  }
 });
 
 watch(
@@ -60,7 +62,9 @@ async function onTitleDown() {
   if (!win) return;
   try {
     await win.startDragging();
-  } catch {}
+  } catch (error) {
+    console.error("拖动控制面板失败", error);
+  }
 }
 
 function onPortInput(event: Event) {

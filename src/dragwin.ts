@@ -24,14 +24,18 @@ export function useOverlayWindow(baseWidth: number, baseHeight?: number) {
     if (!editMode.value || !win) return;
     try {
       await win.startDragging();
-    } catch {}
+    } catch (error) {
+      console.error("拖动 HUD 窗口失败", error);
+    }
   }
   async function onResizeDown(e: PointerEvent) {
     if (!editMode.value || !win) return;
     e.stopPropagation();
     try {
       await win.startResizeDragging("SouthEast");
-    } catch {}
+    } catch (error) {
+      console.error("缩放 HUD 窗口失败", error);
+    }
   }
 
   onMounted(async () => {
@@ -51,7 +55,9 @@ export function useOverlayWindow(baseWidth: number, baseHeight?: number) {
           if (inv) {
             try {
               await inv("save_window_pos", { label, x: payload.x, y: payload.y });
-            } catch {}
+            } catch (error) {
+              console.error("保存窗口位置失败", error);
+            }
           }
         }, 300);
       });
@@ -63,11 +69,15 @@ export function useOverlayWindow(baseWidth: number, baseHeight?: number) {
           if (inv) {
             try {
               await inv("save_window_size", { label, w: payload.width, h: payload.height });
-            } catch {}
+            } catch (error) {
+              console.error("保存窗口尺寸失败", error);
+            }
           }
         }, 300);
       });
-    } catch {}
+    } catch {
+      // 纯浏览器（无 Tauri）下窗口 API 不可用，属预期降级，保持静默
+    }
   });
 
   return { scale, onDragDown, onResizeDown };

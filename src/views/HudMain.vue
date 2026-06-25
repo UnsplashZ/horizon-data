@@ -119,8 +119,8 @@ const litLeds = computed(() => Math.round(rpmPct.value * SEG));
 // 多段换挡阈值（占 EngineMaxRpm 的比例）：接近→该换挡→触顶。
 // FH6 遥测无独立红线字段，只能用 rpm/max_rpm 近似，详见 docs/forza-horizon-6-telemetry.md。
 const RPM_NEAR = 0.88; // 接近红线：文字转琥珀提醒，不闪
-const RPM_SHIFT = 0.94; // 该换挡：转橙并快闪
-const RPM_LIMIT = 0.99; // 触顶/超转：转红并更快闪
+const RPM_SHIFT = 0.92; // 该换挡：转橙并快闪
+const RPM_LIMIT = 0.95; // 触顶/超转：转红并更快闪
 const rpmStage = computed(() => {
   const p = rpmPct.value;
   if (p >= RPM_LIMIT) return 3;
