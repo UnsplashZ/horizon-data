@@ -1,6 +1,6 @@
 {
   "name": "horizon-data",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "private": true,
   "type": "module",
   "description": "Forza Horizon 6 transparent overlay HUD reading UDP Data Out telemetry.",
