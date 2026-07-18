@@ -145,7 +145,7 @@ async function closeMenu() {
     <header @pointerdown="onTitleDown">
       <span>Horizon Data</span>
       <div class="head-right">
-        <strong>{{ editMode ? "Editing" : "Locked" }}</strong>
+        <strong>{{ editMode ? "编辑中" : "已锁定" }}</strong>
         <button class="close" title="关闭菜单" @pointerdown.stop @click="closeMenu">×</button>
       </div>
     </header>
@@ -153,7 +153,7 @@ async function closeMenu() {
     <main>
       <section class="row">
         <label>
-          <span>UDP Port</span>
+          <span>UDP 端口</span>
           <input
             type="number"
             min="1"
@@ -179,15 +179,15 @@ async function closeMenu() {
           class="status-line"
           :class="{ ok: udpStatus.listening && !udpStatus.error, bad: Boolean(udpStatus.error) }"
         >
-          UDP {{ udpStatus.port }} {{ udpStatus.listening ? "LISTENING" : udpStatus.error ? "ERROR" : "WAITING" }}
+          UDP {{ udpStatus.port }} {{ udpStatus.listening ? "正在监听" : udpStatus.error ? "错误" : "等待中" }}
         </div>
         <div v-if="udpStatus?.error" class="status-msg">{{ udpStatus.error }}</div>
-        <div v-if="configError" class="status-msg">CONFIG {{ configError }}</div>
-        <div v-if="shortcutStatus?.error" class="status-msg">SHORTCUT {{ shortcutStatus.error }}</div>
+        <div v-if="configError" class="status-msg">配置 {{ configError }}</div>
+        <div v-if="shortcutStatus?.error" class="status-msg">快捷键 {{ shortcutStatus.error }}</div>
       </section>
 
       <section>
-        <div class="title">Appearance</div>
+        <div class="title">外观</div>
         <label class="slider">
           <span>HUD</span>
           <input
@@ -201,7 +201,7 @@ async function closeMenu() {
           <b>{{ Math.round(config.fg_opacity * 100) }}%</b>
         </label>
         <label class="slider">
-          <span>Background</span>
+          <span>背景</span>
           <input
             type="range"
             min="0"
@@ -215,20 +215,20 @@ async function closeMenu() {
       </section>
 
       <section>
-        <div class="title">Modules</div>
+        <div class="title">模块</div>
         <div class="checks">
-          <label><input type="checkbox" v-model="config.show_tires" @change="saveToggle('show_tires')" /> Tires</label>
-          <label><input type="checkbox" v-model="config.show_inputs" @change="saveToggle('show_inputs')" /> Inputs</label>
-          <label><input type="checkbox" v-model="config.show_gforce" @change="saveToggle('show_gforce')" /> G-Force</label>
+          <label><input type="checkbox" v-model="config.show_tires" @change="saveToggle('show_tires')" /> 轮胎</label>
+          <label><input type="checkbox" v-model="config.show_inputs" @change="saveToggle('show_inputs')" /> 输入</label>
+          <label><input type="checkbox" v-model="config.show_gforce" @change="saveToggle('show_gforce')" /> G 力</label>
         </div>
       </section>
 
       <section>
-        <div class="title">Behavior</div>
+        <div class="title">行为</div>
         <div class="checks behavior">
           <label>
             <input type="checkbox" v-model="config.auto_hide_inactive" @change="saveToggle('auto_hide_inactive')" />
-            Auto-hide when inactive
+            非活动时自动隐藏
           </label>
         </div>
       </section>
