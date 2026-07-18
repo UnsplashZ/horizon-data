@@ -143,9 +143,9 @@ async function closeMenu() {
 <template>
   <div class="panel">
     <header @pointerdown="onTitleDown">
-      <span>HORIZON DATA</span>
+      <span>Horizon Data</span>
       <div class="head-right">
-        <strong>{{ editMode ? "EDIT" : "LOCK" }}</strong>
+        <strong>{{ editMode ? "Editing" : "Locked" }}</strong>
         <button class="close" title="关闭菜单" @pointerdown.stop @click="closeMenu">×</button>
       </div>
     </header>
@@ -153,7 +153,7 @@ async function closeMenu() {
     <main>
       <section class="row">
         <label>
-          <span>PORT</span>
+          <span>UDP Port</span>
           <input
             type="number"
             min="1"
@@ -168,7 +168,7 @@ async function closeMenu() {
           />
         </label>
         <div class="seg">
-          <button :class="{ on: config.units === 'kmh' }" @click="saveUnit('kmh')">KM/H</button>
+          <button :class="{ on: config.units === 'kmh' }" @click="saveUnit('kmh')">km/h</button>
           <button :class="{ on: config.units === 'mph' }" @click="saveUnit('mph')">MPH</button>
         </div>
       </section>
@@ -187,7 +187,7 @@ async function closeMenu() {
       </section>
 
       <section>
-        <div class="title">OPACITY</div>
+        <div class="title">Appearance</div>
         <label class="slider">
           <span>HUD</span>
           <input
@@ -201,7 +201,7 @@ async function closeMenu() {
           <b>{{ Math.round(config.fg_opacity * 100) }}%</b>
         </label>
         <label class="slider">
-          <span>BG</span>
+          <span>Background</span>
           <input
             type="range"
             min="0"
@@ -215,20 +215,20 @@ async function closeMenu() {
       </section>
 
       <section>
-        <div class="title">MODULES</div>
+        <div class="title">Modules</div>
         <div class="checks">
-          <label><input type="checkbox" v-model="config.show_tires" @change="saveToggle('show_tires')" /> TIRES</label>
-          <label><input type="checkbox" v-model="config.show_inputs" @change="saveToggle('show_inputs')" /> INPUTS</label>
-          <label><input type="checkbox" v-model="config.show_gforce" @change="saveToggle('show_gforce')" /> G-FORCE</label>
+          <label><input type="checkbox" v-model="config.show_tires" @change="saveToggle('show_tires')" /> Tires</label>
+          <label><input type="checkbox" v-model="config.show_inputs" @change="saveToggle('show_inputs')" /> Inputs</label>
+          <label><input type="checkbox" v-model="config.show_gforce" @change="saveToggle('show_gforce')" /> G-Force</label>
         </div>
       </section>
 
       <section>
-        <div class="title">BEHAVIOR</div>
+        <div class="title">Behavior</div>
         <div class="checks behavior">
           <label>
             <input type="checkbox" v-model="config.auto_hide_inactive" @change="saveToggle('auto_hide_inactive')" />
-            AUTO HIDE INACTIVE
+            Auto-hide when inactive
           </label>
         </div>
       </section>
@@ -250,18 +250,24 @@ async function closeMenu() {
   flex-direction: column;
   box-sizing: border-box;
   overflow: hidden;
-  background: rgba(6, 8, 11, 0.96);
-  color: #fff;
-  font-family: "Consolas", "SF Mono", monospace;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(31, 31, 34, 0.88);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38), inset 0 1px rgba(255, 255, 255, 0.08);
+  color: #f5f5f7;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  backdrop-filter: blur(28px) saturate(1.35);
 }
 
 header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
-  padding: 0 14px;
-  background: #0c0f13;
+  height: 48px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
   cursor: grab;
   user-select: none;
 }
@@ -269,23 +275,27 @@ header {
 header span,
 .title,
 label span {
-  color: #8a929d;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 2px;
+  color: rgba(235, 235, 245, 0.62);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 header > span {
-  color: #fff;
-  font-size: 12px;
+  color: #f5f5f7;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 header strong {
   padding: 3px 8px;
-  background: #18e06f;
-  color: #041006;
+  border: 1px solid rgba(48, 209, 88, 0.26);
+  border-radius: 8px;
+  background: rgba(48, 209, 88, 0.13);
+  color: #62d97a;
   font-size: 10px;
-  letter-spacing: 1px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .head-right {
@@ -298,12 +308,14 @@ button.close {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   min-height: 0;
   padding: 0;
-  background: #151a21;
-  color: #8a929d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(235, 235, 245, 0.68);
   font-size: 16px;
   font-weight: 700;
   line-height: 1;
@@ -311,7 +323,8 @@ button.close {
 }
 
 button.close:hover {
-  background: #ff4d4d;
+  border-color: rgba(255, 69, 58, 0.55);
+  background: #ff453a;
   color: #fff;
 }
 
@@ -319,14 +332,19 @@ main {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
 }
 
 section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
 }
 
 .row {
@@ -344,14 +362,21 @@ label {
 input[type="number"] {
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 10px;
-  border: 0;
+  height: 32px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
   outline: 0;
-  background: #151a21;
-  color: #fff;
+  background: rgba(0, 0, 0, 0.22);
+  color: #f5f5f7;
   font: inherit;
-  font-size: 13px;
-  font-weight: 900;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+input[type="number"]:focus {
+  border-color: rgba(10, 132, 255, 0.72);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.16);
 }
 
 .status {
@@ -362,65 +387,77 @@ input[type="number"] {
 .status-msg {
   box-sizing: border-box;
   padding: 6px 8px;
-  background: #151a21;
-  color: #dce3ea;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(235, 235, 245, 0.82);
   font-size: 10px;
-  font-weight: 900;
+  font-weight: 600;
   line-height: 1.25;
 }
 
 .status-line.ok {
-  color: #18e06f;
+  color: #62d97a;
 }
 
 .status-line.bad,
 .status-msg {
-  color: #ff7a70;
+  color: #ff6961;
 }
 
 .seg {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.25);
   align-self: end;
 }
 
 button {
-  min-height: 34px;
-  border: 0;
-  background: #151a21;
-  color: #dce3ea;
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(245, 245, 247, 0.9);
   font: inherit;
   font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 1px;
+  font-weight: 600;
+  letter-spacing: 0;
   cursor: pointer;
 }
 
 button.on,
 .actions button:first-child {
-  background: #18e06f;
-  color: #041006;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.19);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .slider {
   display: grid;
-  grid-template-columns: 42px 1fr 42px;
+  grid-template-columns: 68px 1fr 38px;
   align-items: center;
   gap: 10px;
 }
 
 .slider b {
-  color: #dce3ea;
+  color: rgba(235, 235, 245, 0.74);
   font-size: 10px;
   text-align: right;
 }
 
 input[type="range"] {
   width: 100%;
-  height: 5px;
+  height: 4px;
   margin: 0;
-  background: #1c232d;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
   outline: none;
   cursor: pointer;
   -webkit-appearance: none;
@@ -429,7 +466,10 @@ input[type="range"] {
 input[type="range"]::-webkit-slider-thumb {
   width: 16px;
   height: 16px;
-  background: #18e06f;
+  border: 0.5px solid rgba(0, 0, 0, 0.2);
+  border-radius: 50%;
+  background: #f5f5f7;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   cursor: pointer;
   -webkit-appearance: none;
 }
@@ -438,14 +478,17 @@ input[type="range"]::-moz-range-thumb {
   width: 16px;
   height: 16px;
   border: 0;
-  background: #18e06f;
+  border-radius: 50%;
+  background: #f5f5f7;
   cursor: pointer;
 }
 
 .checks {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  grid-template-columns: 1fr;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 6px;
 }
 
 .checks.behavior {
@@ -453,23 +496,50 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .checks label {
-  flex-direction: row;
+  flex-direction: row-reverse;
   align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  background: #151a21;
-  color: #dce3ea;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 1px;
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 0 8px;
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(245, 245, 247, 0.9);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
   cursor: pointer;
 }
 
 .checks input {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  margin: 0;
+  border-radius: 999px;
+  background: rgba(120, 120, 128, 0.42);
+  cursor: pointer;
+  transition: background 0.16s ease;
+  appearance: none;
+}
+
+.checks input::before {
+  position: absolute;
+  top: 2px;
+  left: 2px;
   width: 14px;
   height: 14px;
-  margin: 0;
-  accent-color: #18e06f;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  content: "";
+  transition: transform 0.16s ease;
+}
+
+.checks input:checked {
+  background: #30d158;
+}
+
+.checks input:checked::before {
+  transform: translateX(12px);
 }
 
 .actions {
@@ -477,11 +547,15 @@ input[type="range"]::-moz-range-thumb {
   grid-template-columns: 1fr 1fr auto;
   gap: 8px;
   margin-top: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .actions .dark {
   min-width: 58px;
-  background: #0c0f13;
-  color: #fff;
+  border-color: rgba(255, 69, 58, 0.22);
+  background: rgba(255, 69, 58, 0.12);
+  color: #ff6961;
 }
 </style>

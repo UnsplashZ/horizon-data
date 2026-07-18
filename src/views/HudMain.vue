@@ -187,18 +187,40 @@ const steerOffset = computed(() => {
 function fahrenheitToCelsius(f: number): number {
   return ((f - 32) * 5) / 9;
 }
-// 正常绿 (52,227,150) → 完全失去抓地红 (255,67,70)；tire_slip≈1.2 视为彻底打滑
+const GRIP_STOPS: Array<{ value: number; color: [number, number, number] }> = [
+  { value: 0, color: [52, 211, 153] },
+  { value: 0.62, color: [52, 211, 153] },
+  { value: 0.92, color: [250, 204, 21] },
+  { value: 1.2, color: [251, 146, 60] },
+  { value: 1.75, color: [239, 68, 68] },
+];
+
+// 保留低滑移的稳定绿色区，再用黄、橙、红明确区分接近极限到严重打滑。
 function gripColor(slip: number): string {
-  const s = Math.min(1, Math.max(0, slip / 1.2));
-  const r = Math.round(52 + s * 203);
-  const g = Math.round(227 - s * 160);
-  const b = Math.round(150 - s * 80);
-  return `rgb(${r}, ${g}, ${b})`;
+  const value = Math.min(GRIP_STOPS.at(-1)!.value, Math.max(0, Math.abs(slip)));
+  const upperIndex = GRIP_STOPS.findIndex((stop) => value <= stop.value);
+  const upper = GRIP_STOPS[Math.max(1, upperIndex)];
+  const lower = GRIP_STOPS[Math.max(0, upperIndex - 1)];
+  const p = upper.value === lower.value ? 0 : (value - lower.value) / (upper.value - lower.value);
+  return colorRamp(p, lower.color, upper.color);
 }
 const temps = computed(() =>
   (t.value?.tire_temp ?? [0, 0, 0, 0]).map((f) => Math.round(fahrenheitToCelsius(f))),
 );
-const slips = computed(() => t.value?.tire_slip ?? [0, 0, 0, 0]);
+const slips = ref([0, 0, 0, 0]);
+watch(t, (cur) => {
+  if (!cur || !cur.is_race_on) {
+    slips.value = [0, 0, 0, 0];
+    return;
+  }
+  slips.value = slips.value.map((previous, index) => {
+    const raw = Math.abs(cur.tire_slip[index] ?? 0);
+    const target = Number.isFinite(raw) ? raw : 0;
+    // 打滑升高时抑制单帧尖峰，恢复抓地时稍快回落，兼顾稳定与反馈速度。
+    const alpha = target > previous ? 0.12 : 0.2;
+    return previous + (target - previous) * alpha;
+  });
+});
 
 // ---- G 力 ----
 const gTotal = computed(() => {
@@ -208,11 +230,11 @@ const gTotal = computed(() => {
 });
 const dotX = computed(() => {
   const g = (t.value?.accel_x ?? 0) / 9.8;
-  return 50 + Math.max(-1, Math.min(1, g / 1.5)) * 42;
+  return 50 - Math.max(-1, Math.min(1, g / 1.5)) * 42;
 });
 const dotY = computed(() => {
   const g = (t.value?.accel_z ?? 0) / 9.8;
-  return 50 - Math.max(-1, Math.min(1, g / 1.5)) * 42;
+  return 50 + Math.max(-1, Math.min(1, g / 1.5)) * 42;
 });
 </script>
 
